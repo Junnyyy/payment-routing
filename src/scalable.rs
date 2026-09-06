@@ -264,6 +264,56 @@ impl Router {
             || a.journey.steps.len() < b.journey.steps.len()
             || a.journey.steps <= b.journey.steps
     }
+    // Exact lower fees in a relaxed recurring network: ignore competition and
+    // window closures, retain individual rail usability and the remaining time.
+    // Positive latency makes this a small acyclic time DP. Skip long horizons,
+    // zero-latency services and finite fee overrides rather than invent a bound.
+    fn fee_bounds(
+        &self,
+        payment: &Payment,
+        horizon: u128,
+        target: usize,
+    ) -> Option<Vec<Vec<Option<u128>>>> {
+        let Calendar::Recurring(services) = &self.calendar else {
+            return None;
+        };
+        if horizon > 64 || self.rails.iter().any(|r| r.settlement_minutes == 0) {
+            return None;
+        }
+        let mut costs = vec![vec![None; self.nodes.len()]; horizon as usize + 1];
+        costs[0][target] = Some(0u128);
+        for time in 1..costs.len() {
+            costs[time] = costs[time - 1].clone();
+            for (r, rail) in self.rails.iter().enumerate() {
+                let latency = rail.settlement_minutes as usize;
+                if latency > time
+                    || !rail.available
+                    || services[r].open_minutes == 0
+                    || rail
+                        .max_amount_cents
+                        .is_some_and(|c| payment.amount_cents > c)
+                    || services[r]
+                        .capacity_per_minute_cents
+                        .is_some_and(|c| payment.amount_cents > c)
+                {
+                    continue;
+                }
+                let cheapest = self.members[r]
+                    .iter()
+                    .filter_map(|&n| costs[time - latency][n])
+                    .min();
+                if let Some(remaining) = cheapest {
+                    let fee = remaining + u128::from(rail.fee_cents);
+                    for &n in &self.members[r] {
+                        if costs[time][n].is_none_or(|c| fee < c) {
+                            costs[time][n] = Some(fee);
+                        }
+                    }
+                }
+            }
+        }
+        Some(costs)
+    }
     pub(crate) fn find(
         &self,
         payment: &Payment,
@@ -274,6 +324,16 @@ impl Router {
     ) -> (Option<Journey>, SearchDiagnostics) {
         let source = self.nodes.binary_search(&payment.sender).unwrap();
         let target = self.nodes.binary_search(&payment.receiver).unwrap();
+        let bounds = self.fee_bounds(payment, deadline.saturating_sub(release), target);
+        let estimate = |node: usize, ready: u128, fee: u128| -> Option<u128> {
+            if ready > deadline {
+                return None;
+            }
+            match &bounds {
+                Some(table) => table[(deadline - ready) as usize][node].map(|lower| fee + lower),
+                None => Some(fee),
+            }
+        };
         let mut stats = SearchDiagnostics {
             searches: 1,
             ..Default::default()
@@ -303,6 +363,12 @@ impl Router {
             }
             let label = labels[index].clone();
             if label.ready > deadline {
+                continue;
+            }
+            let Some(lower_fee) = estimate(label.node, label.ready, label.journey.fee) else {
+                continue;
+            };
+            if best.as_ref().is_some_and(|b| lower_fee > b.fee) {
                 continue;
             }
             if best.as_ref().is_some_and(|b| {
@@ -459,9 +525,17 @@ impl Router {
                             truncated = true;
                             break 'search;
                         }
+                        let Some(lower_fee) =
+                            estimate(candidate.node, candidate.ready, candidate.journey.fee)
+                        else {
+                            continue;
+                        };
+                        if best.as_ref().is_some_and(|b| lower_fee > b.fee) {
+                            continue;
+                        }
                         let i = labels.len();
                         heap.push(Reverse((
-                            candidate.journey.fee,
+                            lower_fee,
                             candidate.ready,
                             candidate.journey.steps.len(),
                             i,

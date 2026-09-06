@@ -105,3 +105,28 @@ hits the two-second worker guard. Scheduled ties at 2,048 payments take 1.80 ms;
 512 unit slots take 26.61 ms; a three-hop 1,024-slot timetable takes 8.66 ms.
 All 16 exact same-cohort online comparisons have zero fee gap. Online output
 contains the exact fee and gap for both the static and reserved policies.
+
+## Round 4: pair repair (source 2000f6c)
+
+[Every gap](../benchmarks/results/strategy-repair/gaps.json). All 103 certified
+schedule cases and all 16 exact online cohorts have zero fee gap. The 67.72%
+case falls from 213 to 127 cents. All previous failures remain in earlier logs.
+Repair costs more on small heterogeneous batches; it is skipped for large
+batches and equal-fee fully allocated groups. It never releases earlier online
+commitments.
+
+A new sparse mesh (two local service links per institution plus an expensive
+shared fallback, periodic local closures, SLA eight minutes) is a more difficult
+runtime class. At 100 ticks, 16 / 32 / 64 / 128 institutions take 363 / 1893 / 852 /
+1732 ms. The 32-institution p95 tick is 26.8 ms with 6,561 truncated searches across
+order and repair trials. No accepted work misses a deadline; global optimality
+is unknown for these cohorts. Non-monotonic timing reflects the eight-minute
+SLA: farther destinations make the expensive direct rail increasingly necessary.
+
+Next experiment: for recurring services with strictly positive latencies and
+remaining SLA at most 64 minutes, compute minimum fees in a time-indexed relaxed
+network. This ignores aggregate competition and window closures, so it is an
+admissible fee bound. Shared-rail relaxation uses the cheapest member value,
+without materializing a clique. Use the bound for priority and pruning; skip it
+for zero latency, long horizons and finite fee/latency overrides. Accepted
+witnesses still undergo the original full calendar/resource checks.
