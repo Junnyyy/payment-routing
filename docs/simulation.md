@@ -16,6 +16,8 @@ duplicate flows can express integer weights. Each attempt samples probability,
 flow, amount and SLA before any admission decision, so overload does not change
 future random draws. The seeded generator is explicitly specified SplitMix64 with
 integer rejection sampling; it does not depend on a platform random source.
+Flow order is part of the scenario. Rail and service order is canonicalized by ID
+at construction; the caller's input is owned/copied, not mutated externally.
 
 A service opens when `(minute % period) >= offset` and
 `(minute % period) - offset < open_minutes`. Windows must fit within a positive
@@ -91,8 +93,53 @@ wrapping or saturation. Only the specified 64-bit RNG wraps intentionally.
 - Current per-minute usage never exceeds capacity and is zero on closed services.
 - Active sequences are strictly increasing; active records are either unexpired
   queued/ready work or a single outstanding hop. Terminal work is not retained.
-- Same scenario, seed and processed ticks produce identical state and event
-  sequences, regardless of pauses, caller speed, or tick grouping.
+- Same scenario, seed and processed ticks produce identical execution state and
+  event sequences, regardless of pauses, caller speed, or tick grouping. The
+  driver's run flag independently reflects the last start/pause call.
+
+## Verification and measured limits
+
+Verification on 2026-09-06 used Rust/Cargo 1.97.1 with the locked offline dependency
+graph. The suite contains 95 tests including documentation tests: 74 existing
+checks and 21 simulation checks. Formatting and Clippy with warnings denied pass.
+No terminal lifecycle or UI code changed.
+
+- Fixed SplitMix64 vectors pin the generator. Focused cases cover generation
+  bounds, zero/full probability, admission-independent demand, direct and multihop
+  execution, transaction ceilings, shared capacity, discarded unused capacity,
+  recurring closures, exact-boundary completion, expiry at intermediaries and
+  late in-flight drainage. Wide totals exceed `u64` without loss.
+- `tests/support/simulation_audit.rs` independently reconstructs each generated
+  instruction, route witness, departure, settlement and terminal outcome from
+  emitted events. It checks phase timestamps, membership, principal, actual fees,
+  per-minute capacity, deadlines and all cumulative metrics without calling any
+  simulation or routing helper. Across 128 deterministic scenarios and 80 ticks
+  each, all 10,240 event batches pass this audit and exact paired replay. The same
+  cases also reproduce after restart with 13 + 0 + 67 grouped ticks.
+- Two 100,000-tick runs generate 300,000 payments each. The executing case completes
+  99,999 payments for 200,000 cents of actual fees and peaks at 9 active records.
+  The disconnected, maximum-SLA case peaks at its 8-record limit and explicitly
+  rejects 299,992 payments. Both retain exactly 17 recent events. These stress and
+  replay tests together took approximately 8.6 seconds in the debug test build.
+- Numeric boundary tests advance through `u64::MAX` minutes, force exhaustion of
+  `u128` time/event/volume/cost fields, and inject a conservation violation. Every
+  failed tick leaves the simulator, RNG and event history unchanged.
+
+The example's 10,000-minute seed-42 run generates 19,520 payments, completes 12,849,
+expires 6,665 and leaves 6 active. It completes 936,696,841 cents of principal for
+4,694,565 cents of fees, emits 126,264 events, retains 32 and peaks at 15 active
+records. Every event matches a differently paced twin; restarting reproduces the
+same final state. These numbers describe the example's synthetic parameters,
+not an optimizer-quality or real-network benchmark.
+
+No elapsed-time-dependent collection remains: active payments are capped, routes
+are simple, history is a ring, and the rail state has one record per service. The
+per-tick working transaction and returned event batch are bounded by the same
+scenario limits and arrivals per minute. Choosing enormous limits can still
+exhaust physical memory. The existing exact router remains exponential in network
+size and is called again for unrouted queued payments; this remains a small-network
+reference. The bounded tests establish correctness and sustained operation for
+these scenarios, not a throughput guarantee for arbitrary large topologies.
 
 ## Dependency references
 

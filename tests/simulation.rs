@@ -419,3 +419,80 @@ fn wide_totals_history_limits_and_zero_probability_are_exact() {
     assert!(sim.recent_events().is_empty());
     assert_eq!(sim.event_count(), 20);
 }
+
+#[test]
+fn unused_capacity_is_discarded_between_consecutive_open_minutes() {
+    let mut config = scenario(vec![rail("r", &["A", "B"], 1, 0)]);
+    amount(&mut config, 60);
+    config.services[0].period_minutes = 4;
+    config.services[0].offset_minutes = 2;
+    config.services[0].open_minutes = 2;
+    config.services[0].capacity_per_minute_cents = Some(100);
+    let mut sim = Simulator::new(config, 0).unwrap();
+    sim.advance_ticks(3).unwrap();
+    assert_eq!(sim.metrics().completed, 1);
+    assert_eq!(sim.rail_states()[0].used_this_minute_cents, 60);
+    sim.step().unwrap();
+    // Carrying the previous 40 cents forward would incorrectly allow two hops.
+    assert_eq!(sim.metrics().completed, 2);
+    assert_eq!(sim.rail_states()[0].used_this_minute_cents, 60);
+    assert_eq!(sim.active_payments().len(), 2);
+}
+
+#[test]
+fn expiry_at_an_intermediate_retains_executed_fees_without_counting_completion() {
+    let mut config = scenario(vec![
+        rail("ab", &["A", "B"], 2, 1),
+        rail("bc", &["B", "C"], 3, 1),
+    ]);
+    config.arrivals.flows[0].receiver = "C".into();
+    config.services[1].period_minutes = 3;
+    config.services[1].open_minutes = 1;
+    sla(&mut config, 2);
+    let mut sim = Simulator::new(config, 0).unwrap();
+    sim.advance_ticks(2).unwrap();
+    assert_eq!(sim.active_payments()[0].next_hop, 1);
+    assert_eq!(sim.active_payments()[0].in_flight_until, None);
+    let report = sim.step().unwrap();
+    assert!(
+        report
+            .events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::Expired { sequence: 1 }))
+    );
+    assert_eq!(
+        (
+            sim.metrics().routing_cost_cents,
+            sim.metrics().departed_hops
+        ),
+        (2, 1)
+    );
+    assert_eq!(
+        (
+            sim.metrics().completed,
+            sim.metrics().expired,
+            sim.metrics().sla_failures
+        ),
+        (0, 1, 1)
+    );
+    assert_eq!(sim.metrics().expired_volume_cents, 100);
+}
+
+#[test]
+fn terminal_settlement_frees_admission_space_before_new_arrivals() {
+    let mut config = scenario(vec![rail("r", &["A", "B"], 1, 1)]);
+    config.max_active_payments = 1;
+    config.arrivals.attempts_per_minute = 2;
+    let mut sim = Simulator::new(config, 0).unwrap();
+    sim.advance_ticks(4).unwrap();
+    assert_eq!(
+        (
+            sim.metrics().generated,
+            sim.metrics().completed,
+            sim.metrics().rejected
+        ),
+        (8, 3, 4)
+    );
+    assert_eq!(sim.active_payments()[0].sequence, 7);
+    assert_eq!(sim.metrics().sla_failures, 4);
+}
