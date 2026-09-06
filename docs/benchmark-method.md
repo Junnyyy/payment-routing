@@ -46,6 +46,16 @@ cover the entire worker, including preparation and witness auditing. `solve_ns`
 uses Rust's monotonic clock around the API call only. For tiny cases, consult
 repeat min/max; process launch cost is deliberately not part of solve time.
 
+Once the watchdog observes a timeout or RSS limit, the observation remains
+censored even if the worker exits before the termination signal arrives. The
+supervisor tolerates that `ProcessLookupError`, reaps the child once, and retains
+its actual exit code, resource usage and any completed output. Other supervisor
+errors still propagate. This race is covered for both limits by deterministic
+tests using the Python 3.9
+[process exception](https://docs.python.org/3.9/library/exceptions.html#ProcessLookupError)
+and [mock side effects](https://docs.python.org/3.9/library/unittest.mock.html#unittest.mock.Mock.side_effect)
+APIs retrieved through Context7.
+
 `metadata.json` records the command, manifest, machine/CPU, toolchain, Git state,
 source/lock/binary hashes and limits. `raw.jsonl` retains every observation,
 including killed workers. `summary.csv` and `summary.json` preserve censored counts

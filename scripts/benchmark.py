@@ -42,7 +42,12 @@ def supervise(command, timeout, rss_mib):
                         reason = "rss_limit"
                     last_sample = now
                 if reason:
-                    os.kill(child.pid, signal.SIGKILL)
+                    try:
+                        os.kill(child.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        # The child exited after the poll. Still reap its status
+                        # and resources, preserving the already-observed limit.
+                        pass
                     _, status, usage = os.wait4(child.pid, 0)
                     break
                 time.sleep(0.005)
