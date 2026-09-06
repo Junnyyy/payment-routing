@@ -39,3 +39,27 @@ APIs. Context7 provides rolling std documentation rather than a 1.97.1 snapshot;
 compile and test on that exact installed toolchain. Retrieved sections:
 [BinaryHeap: Min-heap](https://doc.rust-lang.org/stable/std/collections/struct.BinaryHeap.html#min-heap),
 and [Entry::or_default](https://github.com/rust-lang/rust/blob/main/library/std/src/collections/hash/map.rs).
+
+## Round 1: bounded FIFO (source 4c4a9d4)
+
+[Raw results](../benchmarks/results/strategy-fifo/raw.jsonl) and
+[every gap](../benchmarks/results/strategy-fifo/gaps.json). Three ordinary release
+repeats plus a separate counter build, two-second whole-worker/512-MiB sampled
+limits. Of 35 cases with a certified minimum fee, 32 returned full plans. The
+coverage-inclusive median (unresolved counted as infinite) is 0%, but maximum
+finite gap is 381.82% (128-payment knapsack); the 8-payment version is 200% and
+the two-payment urgency trap is 175%. Reverse-deadline cases at 12 and 128 plus
+the no-fallback urgency trap remain unresolved despite known feasible solutions.
+The 48 seeded mixed cases include 33 exact-infeasible cases, retained explicitly.
+
+The reserved policy eliminates the pinned-path SLA loss. At 1,000 ticks it takes
+1.65 ms versus 2.18 ms for the static policy. Dense zero-fee online routing takes
+5.63 / 67.06 / 1126.48 ms at 9 / 32 / 128 institutions; 256 is censored in every
+repeat. The static policy at nine institutions is also censored for 1,000 ticks.
+These timings are host processing, not real rail capacity.
+
+Next experiment: independent FIFO, deadline-first, amount-first and reverse
+allocation orders, keeping the best complete result. This directly targets both
+unserved urgent payments and over-allocation to large low-benefit payments.
+Retain the baseline failures. Subsequently target the avoidable exploration of
+prefixes already unable to improve a direct incumbent in dense zero-fee graphs.

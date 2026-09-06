@@ -62,35 +62,41 @@ impl State {
         }
         self.generate(scenario, &mut events)?;
         if let RoutingStrategy::Reserved { limits } = scenario.strategy {
+            let pending: Vec<_> = self
+                .active
+                .iter()
+                .filter(|p| p.route.is_none() && !p.sla_failed)
+                .map(|p| crate::scalable::Request {
+                    payment: &p.payment,
+                    release: minute,
+                    deadline: p.deadline,
+                })
+                .collect();
+            let (plans, diagnostics) = router.allocate(&pending, &self.reservations, limits);
+            self.routing_diagnostics.plus(diagnostics);
+            let mut plans = plans.into_iter();
             for mut payment in std::mem::take(&mut self.active) {
-                if payment.route.is_none() && !payment.sla_failed {
-                    let (journey, diagnostics) = router.find(
-                        &payment.payment,
-                        minute,
-                        payment.deadline,
-                        &self.reservations,
-                        limits,
+                if payment.route.is_none()
+                    && !payment.sla_failed
+                    && let Some(journey) = plans.next().unwrap()
+                {
+                    router.reserve(
+                        &mut self.reservations,
+                        &journey,
+                        payment.payment.amount_cents,
                     );
-                    self.routing_diagnostics.plus(diagnostics);
-                    if let Some(journey) = journey {
-                        router.reserve(
-                            &mut self.reservations,
-                            &journey,
-                            payment.payment.amount_cents,
-                        );
-                        let route = router.route(&journey);
-                        payment.planned_departures =
-                            Some(journey.steps.iter().map(|s| s.departure).collect());
-                        self.emit(
-                            &mut events,
-                            EventKind::RouteAccepted {
-                                sequence: payment.sequence,
-                                route: route.clone(),
-                            },
-                        )?;
-                        add(&mut self.metrics.accepted_routes, 1, "accepted routes")?;
-                        payment.route = Some(route);
-                    }
+                    let route = router.route(&journey);
+                    payment.planned_departures =
+                        Some(journey.steps.iter().map(|s| s.departure).collect());
+                    self.emit(
+                        &mut events,
+                        EventKind::RouteAccepted {
+                            sequence: payment.sequence,
+                            route: route.clone(),
+                        },
+                    )?;
+                    add(&mut self.metrics.accepted_routes, 1, "accepted routes")?;
+                    payment.route = Some(route);
                 }
                 self.active.push(payment);
             }

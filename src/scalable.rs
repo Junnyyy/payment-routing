@@ -78,7 +78,7 @@ pub(crate) struct Step {
     pub arrival: u128,
     pub fee: u64,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Journey {
     pub steps: Vec<Step>,
     pub fee: u128,
@@ -562,7 +562,7 @@ impl Router {
         }
     }
 }
-/// FIFO bounded allocation. A full result obeys every schedule constraint; None
+/// Multiple deterministic orders of bounded allocation. A full result obeys every schedule constraint; None
 /// means unresolved, including when a greedy allocation blocks a feasible batch.
 pub fn plan_schedule(
     network: &Network,
@@ -573,35 +573,100 @@ pub fn plan_schedule(
     validate_schedule(network, payments, departures)?;
     limits.validate()?;
     let router = Router::finite(network, departures);
-    let mut book = Reservations::default();
-    let mut journeys = vec![];
-    let mut diagnostics = SearchDiagnostics::default();
-    for p in payments {
-        let deadline = u128::from(p.deadline_minute.unwrap_or(u64::MAX))
-            .min(
-                u128::from(p.earliest_execution_minute)
-                    + u128::from(p.payment.max_delivery_minutes.unwrap_or(u64::MAX)),
-            )
-            .min(u128::from(u64::MAX));
-        let (journey, stats) = router.find(
-            &p.payment,
-            p.earliest_execution_minute.into(),
-            deadline,
-            &book,
-            limits,
-        );
-        diagnostics.plus(stats);
-        let Some(journey) = journey else {
-            return Ok(PlanningResult {
-                plan: None,
-                diagnostics,
-            });
-        };
-        router.reserve(&mut book, &journey, p.payment.amount_cents);
-        journeys.push(journey);
-    }
+    let requests: Vec<_> = payments
+        .iter()
+        .map(|p| Request {
+            payment: &p.payment,
+            release: p.earliest_execution_minute.into(),
+            deadline: u128::from(p.deadline_minute.unwrap_or(u64::MAX))
+                .min(
+                    u128::from(p.earliest_execution_minute)
+                        + u128::from(p.payment.max_delivery_minutes.unwrap_or(u64::MAX)),
+                )
+                .min(u128::from(u64::MAX)),
+        })
+        .collect();
+    let (journeys, diagnostics) = router.allocate(&requests, &Reservations::default(), limits);
+    let full: Option<Vec<_>> = journeys.into_iter().collect();
     Ok(PlanningResult {
-        plan: Some(router.plan(payments, &journeys, departures)),
+        plan: full.map(|j| router.plan(payments, &j, departures)),
         diagnostics,
     })
+}
+
+/// One decision in a shared residual calendar. Earlier commitments remain fixed.
+pub(crate) struct Request<'a> {
+    pub payment: &'a Payment,
+    pub release: u128,
+    pub deadline: u128,
+}
+
+impl Router {
+    pub(crate) fn allocate(
+        &self,
+        requests: &[Request<'_>],
+        initial: &Reservations,
+        limits: SearchLimits,
+    ) -> (Vec<Option<Journey>>, SearchDiagnostics) {
+        let base: Vec<_> = (0..requests.len()).collect();
+        let mut orders = vec![base.clone()];
+        let mut deadline = base.clone();
+        deadline.sort_by_key(|&i| {
+            (
+                requests[i].deadline,
+                requests[i].payment.amount_cents,
+                &requests[i].payment.id,
+            )
+        });
+        let mut amount = base.clone();
+        amount.sort_by_key(|&i| {
+            (
+                requests[i].payment.amount_cents,
+                requests[i].deadline,
+                &requests[i].payment.id,
+            )
+        });
+        let reverse: Vec<_> = base.into_iter().rev().collect();
+        for order in [deadline, amount, reverse] {
+            if !orders.contains(&order) {
+                orders.push(order);
+            }
+        }
+        let mut best: Option<Vec<Option<Journey>>> = None;
+        let mut diagnostics = SearchDiagnostics::default();
+        let score = |plans: &[Option<Journey>]| {
+            let served = plans.iter().filter(|p| p.is_some()).count();
+            let fee: u128 = plans.iter().flatten().map(|p| p.fee).sum();
+            let elapsed: u128 = plans
+                .iter()
+                .zip(requests)
+                .filter_map(|(p, r)| {
+                    p.as_ref()
+                        .map(|p| p.steps.last().unwrap().arrival - r.release)
+                })
+                .sum();
+            let hops: usize = plans.iter().flatten().map(|p| p.steps.len()).sum();
+            (Reverse(served), fee, elapsed, hops)
+        };
+        for order in orders {
+            let mut book = initial.clone();
+            let mut plans = vec![None; requests.len()];
+            for i in order {
+                let r = &requests[i];
+                let (journey, stats) = self.find(r.payment, r.release, r.deadline, &book, limits);
+                diagnostics.plus(stats);
+                if let Some(ref j) = journey {
+                    self.reserve(&mut book, j, r.payment.amount_cents);
+                }
+                plans[i] = journey;
+            }
+            if best
+                .as_ref()
+                .is_none_or(|b| (score(&plans), &plans) < (score(b), b))
+            {
+                best = Some(plans);
+            }
+        }
+        (best.unwrap_or_default(), diagnostics)
+    }
 }
