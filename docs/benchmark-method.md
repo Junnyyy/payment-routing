@@ -28,3 +28,74 @@ Crossterm 0.29.0, neither used by the driver. Context7 was queried before coding
 [Popen attributes](https://docs.python.org/3.9/library/subprocess.html#subprocess.Popen.returncode).
 Context7 exposes rolling Rust std docs and Python minor-version docs, not these
 exact patch snapshots; compile/test against the recorded installed versions.
+
+## Reproduce
+
+Run `python3 scripts/benchmark.py --manifest benchmarks/suites/pilot.json --output
+/tmp/payment-routing-pilot --repeats 3 --timeout 3 --rss-mib 512` from the repository
+(join the displayed line break). The driver builds both variants sequentially
+with `cargo build --locked --release --example benchmark`. Output directories must
+be new. `--skip-build` reuses binaries; their SHA-256 is always recorded, and the
+caller is responsible for rebuilding after source changes.
+
+Each case runs in a fresh child process three times without instrumentation and
+once with counters. The supervisor polls completion every 5 ms and RSS every
+100 ms; limits may overshoot by a poll interval plus OS scheduling delay. RSS
+limits are sampled guardrails, not an OS-enforced hard allocation cap. Time limits
+cover the entire worker, including preparation and witness auditing. `solve_ns`
+uses Rust's monotonic clock around the API call only. For tiny cases, consult
+repeat min/max; process launch cost is deliberately not part of solve time.
+
+`metadata.json` records the command, manifest, machine/CPU, toolchain, Git state,
+source/lock/binary hashes and limits. `raw.jsonl` retains every observation,
+including killed workers. `summary.csv` and `summary.json` preserve censored counts
+and report median/min/max of *completed* ordinary runs. A mixed completed/censored
+row is not a completed benchmark. CPU and peak RSS are fresh-worker `wait4`
+measurements; macOS RSS bytes and Linux KiB are normalized to bytes. Process
+resources include setup, auditing and serialization. No allocator telemetry or
+portable exact solver memory attribution is claimed.
+
+A worker can be replayed with `target/benchmark/plain/release/examples/benchmark
+FAMILY SCALE SEED TICKS --dump` (join the line break). This prints the complete
+fixture and witness as JSON strings containing Rust debug representations. The
+manifest plus source/binary hash is the executable replay format. Stable FNV-1a
+fingerprints detect changed fixtures, full witnesses or simulation final states;
+they are diagnostic checksums, not cryptographic proofs. SHA-256 identifies code
+and binaries. Repeats and counter builds must agree on deterministic results.
+
+## Meaning of metrics
+
+- `path_states`: recursive path visits, including immediately pruned states.
+- `candidates`: feasible destination paths; batch/schedule retain these before
+  joint assignment. Single routing keeps only its incumbent; its count excludes
+  paths already removed by fee/deadline pruning.
+- `candidate_hops`: summed witness hops, a storage proxy, not allocated bytes.
+- `assignment_states`, `complete_assignments`, `bound_prunes`: visited joint
+  prefixes, complete surviving assignments, and score-bound exits. Single-router
+  fee-bound exits also increment `bound_prunes`.
+- `capacity_rejects`: failed joint candidate capacity checks. It excludes path
+  enumeration capacity filtering. Deadline counters count search checks, not a
+  comparable number of unique paths across algorithms.
+- Simulation counters include repeated single-route attempts. Queue samples are
+  taken after each committed tick: queued means active with no in-flight hop.
+  Peak active therefore excludes within-tick admission spikes. Mean/p95 queue,
+  oldest queued age, terminal counts, cumulative fees, per-rail resource usage,
+  actual simulated throughput and host processing throughput remain distinct.
+  SLA failures include overload and expiry; end-of-run active work is censored.
+- `optimal` means the existing exact solver returned a full solution; returned
+  witnesses are independently audited. Constructed cases assert hand-derived
+  minimum fees; small versions are checked against existing independent oracles.
+  A measured single-router solution ignores batch capacity by contract.
+
+## Seeded windows
+
+`window-*` replays a continuous simulator from seed through an eight-minute
+warmup and captures every `Generated` instruction in the next `scale` minutes,
+including any rejected instructions. It preserves release times and deadlines.
+The timetable explicitly expands each recurring service from the window start
+through the cohort's last deadline. It gives the cohort full slot capacity,
+without carry-in or background demand: an isolated retrospective counterfactual.
+The batch projection sums those departure budgets per rail and drops waiting;
+the single projection also drops capacity. These are relaxations, not executions
+of the online policy. Fees can be compared as lower bounds only when the relaxed
+batch is feasible; no online optimality gap is inferred from these projections.

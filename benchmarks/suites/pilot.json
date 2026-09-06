@@ -1,0 +1,337 @@
+{
+  "schema": 1,
+  "description": "Initial paired sweep; synthetic deterministic fixtures and seed-42 windows",
+  "cases": [
+    {
+      "family": "single-positive",
+      "scale": 4
+    },
+    {
+      "family": "single-positive",
+      "scale": 8
+    },
+    {
+      "family": "single-positive",
+      "scale": 12
+    },
+    {
+      "family": "single-positive",
+      "scale": 16
+    },
+    {
+      "family": "single-zero",
+      "scale": 4
+    },
+    {
+      "family": "single-zero",
+      "scale": 7
+    },
+    {
+      "family": "single-zero",
+      "scale": 9
+    },
+    {
+      "family": "single-zero",
+      "scale": 11
+    },
+    {
+      "family": "single-deadline",
+      "scale": 7
+    },
+    {
+      "family": "single-deadline",
+      "scale": 11
+    },
+    {
+      "family": "single-deadline",
+      "scale": 16
+    },
+    {
+      "family": "single-disconnected",
+      "scale": 5
+    },
+    {
+      "family": "single-disconnected",
+      "scale": 8
+    },
+    {
+      "family": "single-disconnected",
+      "scale": 10
+    },
+    {
+      "family": "single-chain",
+      "scale": 8
+    },
+    {
+      "family": "single-chain",
+      "scale": 32
+    },
+    {
+      "family": "single-chain",
+      "scale": 100
+    },
+    {
+      "family": "batch-volume",
+      "scale": 8
+    },
+    {
+      "family": "batch-volume",
+      "scale": 32
+    },
+    {
+      "family": "batch-volume",
+      "scale": 128
+    },
+    {
+      "family": "batch-ties",
+      "scale": 8
+    },
+    {
+      "family": "batch-ties",
+      "scale": 16
+    },
+    {
+      "family": "batch-ties",
+      "scale": 22
+    },
+    {
+      "family": "batch-scarce",
+      "scale": 8
+    },
+    {
+      "family": "batch-scarce",
+      "scale": 16
+    },
+    {
+      "family": "batch-scarce",
+      "scale": 22
+    },
+    {
+      "family": "batch-infeasible",
+      "scale": 8
+    },
+    {
+      "family": "batch-infeasible",
+      "scale": 16
+    },
+    {
+      "family": "batch-infeasible",
+      "scale": 22
+    },
+    {
+      "family": "batch-density",
+      "scale": 5
+    },
+    {
+      "family": "batch-density",
+      "scale": 7
+    },
+    {
+      "family": "batch-density",
+      "scale": 9
+    },
+    {
+      "family": "batch-density",
+      "scale": 10
+    },
+    {
+      "family": "batch-ceiling",
+      "scale": 8
+    },
+    {
+      "family": "batch-ceiling",
+      "scale": 128
+    },
+    {
+      "family": "batch-trap",
+      "scale": 2
+    },
+    {
+      "family": "batch-trap-infeasible-greedy",
+      "scale": 2
+    },
+    {
+      "family": "batch-demo",
+      "scale": 12
+    },
+    {
+      "family": "schedule-ties",
+      "scale": 8
+    },
+    {
+      "family": "schedule-ties",
+      "scale": 16
+    },
+    {
+      "family": "schedule-ties",
+      "scale": 22
+    },
+    {
+      "family": "schedule-contention",
+      "scale": 4
+    },
+    {
+      "family": "schedule-contention",
+      "scale": 7
+    },
+    {
+      "family": "schedule-contention",
+      "scale": 10
+    },
+    {
+      "family": "schedule-deadline",
+      "scale": 4
+    },
+    {
+      "family": "schedule-deadline",
+      "scale": 7
+    },
+    {
+      "family": "schedule-deadline",
+      "scale": 10
+    },
+    {
+      "family": "schedule-slots",
+      "scale": 4
+    },
+    {
+      "family": "schedule-slots",
+      "scale": 32
+    },
+    {
+      "family": "schedule-slots",
+      "scale": 128
+    },
+    {
+      "family": "schedule-nonfifo",
+      "scale": 2
+    },
+    {
+      "family": "schedule-demo",
+      "scale": 12
+    },
+    {
+      "family": "sim-load",
+      "scale": 2
+    },
+    {
+      "family": "sim-load",
+      "scale": 8
+    },
+    {
+      "family": "sim-load",
+      "scale": 16
+    },
+    {
+      "family": "sim-load",
+      "scale": 32
+    },
+    {
+      "family": "sim-deadline",
+      "scale": 2
+    },
+    {
+      "family": "sim-deadline",
+      "scale": 8
+    },
+    {
+      "family": "sim-deadline",
+      "scale": 32
+    },
+    {
+      "family": "sim-outage",
+      "scale": 2
+    },
+    {
+      "family": "sim-outage",
+      "scale": 8
+    },
+    {
+      "family": "sim-outage",
+      "scale": 32
+    },
+    {
+      "family": "sim-disconnected",
+      "scale": 8
+    },
+    {
+      "family": "sim-disconnected",
+      "scale": 64
+    },
+    {
+      "family": "sim-disconnected",
+      "scale": 256
+    },
+    {
+      "family": "sim-history",
+      "scale": 2
+    },
+    {
+      "family": "sim-history",
+      "scale": 32
+    },
+    {
+      "family": "sim-history",
+      "scale": 4096
+    },
+    {
+      "family": "sim-density",
+      "scale": 4,
+      "ticks": 100
+    },
+    {
+      "family": "sim-density",
+      "scale": 7,
+      "ticks": 100
+    },
+    {
+      "family": "sim-density",
+      "scale": 9,
+      "ticks": 100
+    },
+    {
+      "family": "sim-pinned",
+      "scale": 2
+    },
+    {
+      "family": "sim-pinned",
+      "scale": 8
+    },
+    {
+      "family": "window-static",
+      "scale": 2
+    },
+    {
+      "family": "window-static",
+      "scale": 4
+    },
+    {
+      "family": "window-static",
+      "scale": 8
+    },
+    {
+      "family": "window-batch",
+      "scale": 2
+    },
+    {
+      "family": "window-batch",
+      "scale": 4
+    },
+    {
+      "family": "window-batch",
+      "scale": 8
+    },
+    {
+      "family": "window-schedule",
+      "scale": 2
+    },
+    {
+      "family": "window-schedule",
+      "scale": 4
+    },
+    {
+      "family": "window-schedule",
+      "scale": 8
+    }
+  ]
+}
