@@ -39,8 +39,8 @@ impl RailService {
     }
 }
 
-/// The initial policy delegates path selection to the existing static router.
-/// It considers current availability/capacity, then pins each accepted path.
+/// Select the original exact static policy or bounded reserved execution.
+/// Only the reserved policy commits a complete feasible departure calendar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutingStrategy {
     CheapestStatic,

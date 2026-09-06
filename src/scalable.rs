@@ -18,7 +18,7 @@ pub struct SearchLimits {
     pub max_labels: usize,
     pub max_expansions: usize,
     pub max_candidates: usize,
-    /// Pair trials for groups of at most 16 requests; zero disables repair.
+    /// Local repair trials for groups of at most 16 requests; zero disables repair.
     pub max_repairs: usize,
 }
 impl Default for SearchLimits {
@@ -44,6 +44,8 @@ impl SearchLimits {
         Ok(())
     }
 }
+/// Attempted searches, including discarded order/repair trials. Saturating
+/// aggregates do not count unique payments or imply terminal SLA failures.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SearchDiagnostics {
     pub searches: u128,

@@ -85,3 +85,19 @@ The `--skip-build` driver option is only for knowingly reusing an existing binar
 after source changes, use the normal build path. Historical Git/source and binary
 hashes are recorded in metadata; results should never be relabeled as measurements
 of a different build.
+
+## Bounded strategy comparisons
+
+Families prefixed `bounded-` use the new scalable planner or reserved simulator
+policy against the same fixture. `feasible` is an audited full heuristic plan;
+`unresolved` is a completed heuristic attempt without a full plan, not a proof of
+infeasibility. These statuses count as completed worker observations, not as
+successful allocations. `scripts/strategy_gaps.py RESULT_DIRECTORY` joins each
+finite heuristic case to its exact result or independent fee certificate and
+writes every gap, including unresolved and unknown entries, to `gaps.json`.
+Zero-optimum/infinite-gap cases are explicit. `sim-quality` prints its exact
+same-cohort gap in the worker result; other simulation cohorts have no inferred
+global gap. See [the final report](../docs/scalable-routing-report.md) and
+[experiment log](../docs/scalable-routing.md) for interpretation and retained
+pathologies. Final `strategy-final.json` uses a ten-second guard; the original
+frontier and early strategy experiments used shorter guards.

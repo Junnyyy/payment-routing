@@ -15,6 +15,8 @@ def compare(rows):
             continue
         r = dict(row)
         oracle = exact.get((r['family'][8:], r['scale'], r['seed'], r['ticks']))
+        if oracle and oracle['status'] == 'infeasible' and r['status'] == 'feasible':
+            raise AssertionError('heuristic feasibility contradicts exact infeasibility')
         known = r.get('known_optimum_fee', r.get('reference_fee_cents'))
         source = 'analytical fee certificate' if known is not None else 'unknown'
         if oracle and oracle['status'] == 'optimal':
