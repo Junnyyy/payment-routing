@@ -13,8 +13,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|s| s.parse::<u64>())
         .transpose()?
         .unwrap_or(42);
+    let strategy = match args.next().as_deref() {
+        None | Some("static") => RoutingStrategy::CheapestStatic,
+        Some("reserved") => RoutingStrategy::Reserved {
+            limits: Default::default(),
+        },
+        _ => return Err("strategy must be static or reserved".into()),
+    };
     if args.next().is_some() {
-        return Err("usage: cargo run --locked --example simulate -- [ticks] [seed]".into());
+        return Err(
+            "usage: cargo run --locked --example simulate -- [ticks] [seed] [static|reserved]"
+                .into(),
+        );
     }
     let mut network = demo_network();
     // Explicit, accelerated synthetic timings for this simulation example only.
@@ -70,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             min_sla_minutes: 0,
             max_sla_minutes: 12,
         },
-        strategy: RoutingStrategy::CheapestStatic,
+        strategy,
         max_active_payments: 64,
         retained_events: 32,
     };
@@ -93,6 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     manual.check_invariants()?;
     let metrics = manual.metrics();
     println!("Synthetic USD simulation; accelerated example timings; seed {seed}; {ticks} minutes");
+    println!("Strategy: {strategy:?}");
     println!("Replay: every event and final state identical with manual vs paced/paused stepping");
     println!(
         "Generated: {}; completed: {}; expired: {}; rejected: {}; active: {}",
@@ -129,5 +140,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     manual.advance_ticks(ticks)?;
     assert_eq!(manual, final_state);
     println!("Restart: identical state after replay from seed");
+    println!(
+        "Routing diagnostics: {:?}; live reservation entries: {}",
+        manual.routing_diagnostics(),
+        manual.reservation_entries()
+    );
     Ok(())
 }

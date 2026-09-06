@@ -125,3 +125,90 @@ fn pair_repair_fixes_measured_scarcity_trap_without_changing_fixed_capacity() {
         127
     );
 }
+
+#[test]
+fn recurring_deadline_bound_matches_exact_single_payment_calendars() {
+    for seed in 0..128 {
+        let mut c = fixtures::simulation_case("sim-pinned", 2);
+        for (i, r) in c.network.rails.iter_mut().enumerate() {
+            r.fee_cents = (seed + i as u64) % 4;
+            r.settlement_minutes = 1 + (seed % 2) as u32;
+        }
+        for (i, s) in c.services.iter_mut().enumerate() {
+            s.period_minutes = 1 + (seed + i as u64) % 4;
+            s.offset_minutes = (seed / 3) % s.period_minutes;
+            s.open_minutes = s.period_minutes - s.offset_minutes;
+            s.capacity_per_minute_cents = Some((seed + i as u64) % 3);
+        }
+        c.arrivals.probability_per_million = 1_000_000;
+        c.arrivals.min_sla_minutes = 8;
+        c.arrivals.max_sla_minutes = 8;
+        c.strategy = RoutingStrategy::Reserved {
+            limits: Default::default(),
+        };
+        let mut sim = Simulator::new(c.clone(), seed).unwrap();
+        let report = sim.step().unwrap();
+        let payment = report
+            .events
+            .iter()
+            .find_map(|e| {
+                if let EventKind::Generated { payment, .. } = &e.kind {
+                    Some(payment.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let p = TimedPayment {
+            payment,
+            earliest_execution_minute: 0,
+            deadline_minute: Some(8),
+        };
+        let mut slots = vec![];
+        for service in &c.services {
+            for time in 0..=8 {
+                let phase = time % service.period_minutes;
+                if phase >= service.offset_minutes
+                    && phase - service.offset_minutes < service.open_minutes
+                {
+                    slots.push(RailDeparture {
+                        rail_id: service.rail_id.clone(),
+                        departure_minute: time,
+                        fee_cents: None,
+                        settlement_minutes: None,
+                        capacity_cents: service.capacity_per_minute_cents,
+                    });
+                }
+            }
+        }
+        let exact = optimize_schedule(&c.network, &[p], &slots).unwrap();
+        let actual = report.events.iter().find_map(|e| {
+            if let EventKind::RouteAccepted { route, .. } = &e.kind {
+                Some(route.total_fee_cents)
+            } else {
+                None
+            }
+        });
+        assert_eq!(actual, exact.map(|p| p.total_fee_cents), "seed {seed}");
+    }
+}
+
+#[test]
+fn reserved_overload_stays_bounded_over_one_hundred_thousand_ticks() {
+    let mut c = fixtures::simulation_case("sim-load", 4);
+    c.strategy = RoutingStrategy::Reserved {
+        limits: Default::default(),
+    };
+    c.services[0].capacity_per_minute_cents = Some(1);
+    c.max_active_payments = 16;
+    c.retained_events = 17;
+    let mut sim = Simulator::new(c, 42).unwrap();
+    for _ in 0..100_000 {
+        sim.step().unwrap();
+        assert!(sim.active_payments().len() <= 16);
+        assert!(sim.reservation_entries() <= 9);
+        assert!(sim.recent_events().len() <= 17);
+    }
+    assert_eq!(sim.metrics().completed_late, 0);
+    assert!(sim.metrics().rejected + sim.metrics().expired > 0);
+}

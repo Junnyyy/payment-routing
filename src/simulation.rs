@@ -325,7 +325,7 @@ mod tests {
     use super::*;
     use crate::demo::demo_network;
 
-    fn simulator() -> Simulator {
+    pub(super) fn simulator() -> Simulator {
         let mut network = demo_network();
         for rail in &mut network.rails {
             rail.settlement_minutes = 0;
@@ -400,5 +400,31 @@ mod tests {
         let before = sim.clone();
         assert!(matches!(sim.step(), Err(SimulationError::Invariant(_))));
         assert_eq!(sim, before);
+    }
+}
+
+#[cfg(test)]
+mod reserved_boundary_tests {
+    use super::*;
+    #[test]
+    fn reservation_errors_roll_back_and_timestamps_cross_u64() {
+        let mut sim = super::tests::simulator();
+        sim.scenario.strategy = RoutingStrategy::Reserved {
+            limits: Default::default(),
+        };
+        sim.state.next_minute = u128::from(u64::MAX);
+        sim.step().unwrap();
+        sim.step().unwrap();
+        for field in 0..3 {
+            let mut trial = sim.clone();
+            match field {
+                0 => trial.state.next_event = u128::MAX - 1,
+                1 => trial.state.next_minute = u128::MAX,
+                _ => trial.state.metrics.routing_cost_cents = u128::MAX,
+            }
+            let before = trial.clone();
+            assert!(trial.step().is_err());
+            assert_eq!(trial, before);
+        }
     }
 }

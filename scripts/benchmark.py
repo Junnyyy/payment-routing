@@ -120,6 +120,9 @@ def summary(rows):
                     if k not in ("kind", "family", "scale", "seed", "ticks")})
         out.update({k: v for k, v in solved[0]["result"].items()
                     if k not in ("kind", "status", "solve_ns", "instrumented", "rail_metrics")})
+        if all("tick_ns_p95" in r["result"] for r in solved):
+            out["tick_ns_p95_median"] = statistics.median(r["result"]["tick_ns_p95"] for r in solved)
+            out["tick_ns_max_max"] = max(r["result"]["tick_ns_max"] for r in solved)
         if out["status"] == "simulated":
             out["completed_per_sim_minute"] = out["completed"] / out["ticks"]
             out["generated_per_wall_second"] = out["generated"] / (out["solve_ms_median"] / 1000)

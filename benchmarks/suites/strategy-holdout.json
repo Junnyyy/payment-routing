@@ -1,0 +1,1138 @@
+{
+  "schema": 1,
+  "description": "Untuned seed holdout and longer continuous runs; 10-second worker guard",
+  "cases": [
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 64
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 64
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 65
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 65
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 66
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 66
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 67
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 67
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 68
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 68
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 69
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 69
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 70
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 70
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 71
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 71
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 72
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 72
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 73
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 73
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 74
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 74
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 75
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 75
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 76
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 76
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 77
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 77
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 78
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 78
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 79
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 79
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 80
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 80
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 81
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 81
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 82
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 82
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 83
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 83
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 84
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 84
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 85
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 85
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 86
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 86
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 87
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 87
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 88
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 88
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 89
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 89
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 90
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 90
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 91
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 91
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 92
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 92
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 93
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 93
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 94
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 94
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 95
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 95
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 96
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 96
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 97
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 97
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 98
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 98
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 99
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 99
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 100
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 100
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 101
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 101
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 102
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 102
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 103
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 103
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 104
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 104
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 105
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 105
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 106
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 106
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 107
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 107
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 108
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 108
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 109
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 109
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 110
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 110
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 111
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 111
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 112
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 112
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 113
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 113
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 114
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 114
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 115
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 115
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 116
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 116
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 117
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 117
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 118
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 118
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 119
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 119
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 120
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 120
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 121
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 121
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 122
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 122
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 123
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 123
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 124
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 124
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 125
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 125
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 126
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 126
+    },
+    {
+      "family": "schedule-mixed",
+      "scale": 5,
+      "seed": 127
+    },
+    {
+      "family": "bounded-schedule-mixed",
+      "scale": 5,
+      "seed": 127
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 16,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 16,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 17,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 17,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 18,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 18,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 19,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 19,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 20,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 20,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 21,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 21,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 22,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 22,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 23,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 23,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 24,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 24,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 25,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 25,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 26,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 26,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 27,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 27,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 28,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 28,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 29,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 29,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 30,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 30,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 31,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 31,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 32,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 32,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 33,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 33,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 34,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 34,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 35,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 35,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 36,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 36,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 37,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 37,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 38,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 38,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 39,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 39,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 40,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 40,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 41,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 41,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 42,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 42,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 43,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 43,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 44,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 44,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 45,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 45,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 46,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 46,
+      "ticks": 3
+    },
+    {
+      "family": "sim-quality",
+      "scale": 3,
+      "seed": 47,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-quality",
+      "scale": 3,
+      "seed": 47,
+      "ticks": 3
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 16,
+      "seed": 0,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 16,
+      "seed": 42,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 16,
+      "seed": 99,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 32,
+      "seed": 0,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 32,
+      "seed": 42,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 32,
+      "seed": 99,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 64,
+      "seed": 0,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 64,
+      "seed": 42,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 64,
+      "seed": 99,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 128,
+      "seed": 0,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 128,
+      "seed": 42,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-mesh",
+      "scale": 128,
+      "seed": 99,
+      "ticks": 1000
+    },
+    {
+      "family": "bounded-sim-density",
+      "scale": 512,
+      "seed": 0,
+      "ticks": 10000
+    },
+    {
+      "family": "bounded-sim-load",
+      "scale": 16,
+      "seed": 0,
+      "ticks": 10000
+    },
+    {
+      "family": "bounded-sim-density",
+      "scale": 512,
+      "seed": 42,
+      "ticks": 10000
+    },
+    {
+      "family": "bounded-sim-load",
+      "scale": 16,
+      "seed": 42,
+      "ticks": 10000
+    },
+    {
+      "family": "bounded-sim-density",
+      "scale": 512,
+      "seed": 99,
+      "ticks": 10000
+    },
+    {
+      "family": "bounded-sim-load",
+      "scale": 16,
+      "seed": 99,
+      "ticks": 10000
+    }
+  ]
+}
