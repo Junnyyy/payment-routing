@@ -1,0 +1,9 @@
+[package]
+name = "payment-routing"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "A deterministic payment-network explorer"
+
+[dependencies]
+ratatui = { version = "=0.30.0", default-features = false, features = ["crossterm", "layout-cache"] }
