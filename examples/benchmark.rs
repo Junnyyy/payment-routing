@@ -437,6 +437,9 @@ fn main() {
             "infeasible"
         },
     );
+    if !heuristic && score.is_some() {
+        out.number("optimality_gap_percent", 0);
+    }
     if let Some((f, t, h)) = score {
         out.number("fee_cents", f);
         out.number("objective_minutes", t);

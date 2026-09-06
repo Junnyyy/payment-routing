@@ -801,6 +801,34 @@ impl Router {
                 }
             }
         }
+        // A pair accepted late in the sweep can free a cheaper single route for
+        // an earlier payment. Use only the remaining repair budget to recheck it.
+        if requests.len() <= 16 && diagnostics.repair_trials > 0 {
+            let mut order: Vec<_> = (0..requests.len()).collect();
+            order.sort_by_key(|&i| Reverse(best[i].as_ref().map_or(u128::MAX, |j| j.fee)));
+            for i in order {
+                if diagnostics.repair_trials >= limits.max_repairs as u128 {
+                    break;
+                }
+                diagnostics.repair_trials += 1;
+                let mut book = initial.clone();
+                for (k, plan) in best.iter().enumerate() {
+                    if k != i
+                        && let Some(plan) = plan
+                    {
+                        self.reserve(&mut book, plan, requests[k].payment.amount_cents);
+                    }
+                }
+                let r = &requests[i];
+                let (journey, stats) = self.find(r.payment, r.release, r.deadline, &book, limits);
+                diagnostics.plus(stats);
+                let mut candidate = best.clone();
+                candidate[i] = journey;
+                if (score(&candidate), &candidate) < (score(&best), &best) {
+                    best = candidate;
+                }
+            }
+        }
         (best, diagnostics)
     }
 }

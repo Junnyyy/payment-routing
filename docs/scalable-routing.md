@@ -130,3 +130,31 @@ admissible fee bound. Shared-rail relaxation uses the cheapest member value,
 without materializing a clique. Use the bound for priority and pruning; skip it
 for zero latency, long horizons and finite fee/latency overrides. Accepted
 witnesses still undergo the original full calendar/resource checks.
+
+## Round 5 and untouched-seed check (sources a14bc2c / c740bfe)
+
+[Bound results](../benchmarks/results/strategy-bounds/gaps.json) keep all 103
+certified fees optimal. On the sparse 32-institution mesh the bound cuts 100 ticks
+from 1,893 to 410 ms and truncations from 6,561 to 2. Queue mean rises from 6.00 to
+10.55 and end-of-window completions fall from 587 to 572, with zero SLA failures:
+cheaper longer routes leave more in-flight work at the observation boundary.
+Actual fees are 1,439 versus 14,016 cents; these are **not optimality gaps** because
+completed cohorts differ and the global online optimum is unknown.
+
+The [untouched-seed check](../benchmarks/results/strategy-holdout/gaps.json) finds
+full plans for all 64 new feasible batches: median 0%, gaps 3.57% (seed 65), 4.42%
+(seed 66), 0.94% (seed 123), and zero elsewhere. All 32 additional exact online
+cohorts have zero gap. Long mesh runs complete at roughly 260–790 ticks/second;
+the 32-institution p95 is about 8.4 ms. The 512-institution zero-fee simulation
+processes 10,000 ticks in 537–547 ms across seeds 0/42/99. No source tests ran
+concurrently with these final timing rounds; exploratory round 4 overlapped a
+validation run, so its timing differences should not be attributed entirely to
+the algorithm. Every round records raw repeat ranges and host resources.
+
+Inspecting seed 66 shows a late pair repair frees a cheaper direct route for an
+earlier assignment. Its stored eight-cent route can now be replaced by a
+three-cent route without disturbing anything else. The final experiment spends
+only unused repair trials on one single-route repricing sweep. It changes 118 to
+113 cents without raising the configured repair budget. Seeds 65 and 123 involve
+coordinated allocations rather than this stale local choice. Retain them and add
+32 new schedule seeds plus 16 new online seeds for final reporting.

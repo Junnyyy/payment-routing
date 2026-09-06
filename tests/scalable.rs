@@ -212,3 +212,13 @@ fn reserved_overload_stays_bounded_over_one_hundred_thousand_ticks() {
     assert_eq!(sim.metrics().completed_late, 0);
     assert!(sim.metrics().rejected + sim.metrics().expired > 0);
 }
+
+#[test]
+fn remaining_repair_budget_reprices_routes_after_later_capacity_changes() {
+    let c = quality::case("schedule-mixed", 5, 66);
+    let p = plan_schedule(&c.network, &c.timed, &c.slots, Default::default()).unwrap();
+    assert!(p.diagnostics.repair_trials <= 16);
+    let p = p.plan.unwrap();
+    audit::schedule(&c.network, &c.timed, &c.slots, &p);
+    assert_eq!(p.total_fee_cents, 113);
+}
