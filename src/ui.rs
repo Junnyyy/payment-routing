@@ -77,7 +77,7 @@ fn overview(frame: &mut Frame, area: Rect, network: &Network) {
         )),
         Line::from(""),
         Line::from(" All payments await routing. Opening balances are unchanged."),
-        Line::from(" Rail fees and settlement times are fictional scenario inputs."),
+        Line::from(" Rail membership, fees and settlement times are synthetic inputs."),
         Line::from(" No routes, fees incurred, or settlement outcomes have been computed."),
     ];
     frame.render_widget(
@@ -109,10 +109,10 @@ fn records(frame: &mut Frame, area: Rect, app: &mut App) {
                 .collect::<Vec<_>>(),
         ),
         View::Rails => (
-            "Payment rails / fictional terms",
+            "Payment rails / synthetic inputs",
             vec!["ID", "Rail", "Members", "Fee USD", "Minutes"],
             vec![
-                Constraint::Length(6),
+                Constraint::Length(7),
                 Constraint::Length(13),
                 Constraint::Fill(1),
                 Constraint::Length(8),
@@ -219,12 +219,13 @@ mod tests {
             "SYNTHETIC",
             "USD",
             "Institutions   6",
-            "Payment rails   3",
+            "Payment rails   4",
             "Payments  12",
             "1,000,000.00",
             "225,001.50",
             "75,000.00",
             "await routing",
+            "Rail membership, fees and settlement times are synthetic inputs.",
             "Ctrl-C: quit",
         ] {
             assert!(output.contains(expected), "missing {expected}: {output}");
@@ -242,9 +243,16 @@ mod tests {
             (
                 View::Rails,
                 vec![
-                    "BATCH",
-                    "Demo Instant",
+                    "Payment rails / synthetic inputs",
+                    "RTP",
+                    "FEDNOW",
+                    "FedNow",
+                    "ACH",
+                    "FEDWIRE",
+                    "Fedwire",
                     "ALP BRK CDR DLT ELM FLD",
+                    "0.25",
+                    "0.05",
                     "15.00",
                     "1440",
                 ],
@@ -255,9 +263,16 @@ mod tests {
             ),
         ] {
             app.view = view;
-            let output = screen(&mut app, 80, 24);
-            for value in expected {
-                assert!(output.contains(value), "missing {value}: {output}");
+            let heights: &[u16] = if view == View::Rails {
+                &[18, 24]
+            } else {
+                &[24]
+            };
+            for &height in heights {
+                let output = screen(&mut app, 80, height);
+                for value in &expected {
+                    assert!(output.contains(value), "missing {value}: {output}");
+                }
             }
         }
     }

@@ -25,18 +25,18 @@ Each table remembers its selected row and scrolls to keep it visible. Run `cargo
 
 ## Demo scenario
 
-All institutions and rail terms are fictional. All money is USD, stored as integer cents. Loading the fixture always produces the same records in the same order.
+Institutions are fictional. The demo uses recognizable U.S. payment-rail names: **RTP, FedNow, ACH and Fedwire**. All rail membership, topology, fees and settlement times are synthetic scenario inputs, not verified real-world network data or operating rules. Capacity limits, availability schedules and other network rules are not modeled. All money is USD, stored as integer cents. Loading the fixture always produces the same records in the same order.
 
 | Statistic | Expected value |
 | --- | ---: |
 | Institutions | 6 |
-| Payment rails | 3 |
+| Payment rails | 4 |
 | Payments awaiting routing | 12 |
 | Opening liquidity | USD 1,000,000.00 |
 | Payment volume | USD 225,001.50 |
 | Largest payment | USD 75,000.00 |
 
-The institutions view shows identifiers, names and opening balances. Rails show their members, fixed fee inputs and settlement minutes (0 means immediate in this fictional scenario). Payments show sender and receiver institution IDs, amounts and their awaiting-routing state. The overview computes its totals from the loaded data.
+The institutions view shows identifiers, names and opening balances. Rails show their members, fixed fee inputs and settlement minutes (0 means immediate only in this synthetic scenario). Payments show sender and receiver institution IDs, amounts and their awaiting-routing state. The overview computes its totals from the loaded data.
 
 Payments are unassigned instructions. The application does not choose routes, assess feasibility, incur fees, move funds or settle payments. There is no routing optimization or external optimization solver. Scenario-file import, multiple currencies and execution are outside this foundation.
 

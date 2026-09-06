@@ -1,6 +1,8 @@
 use crate::network::{Institution, Network, Payment, Rail};
 
 /// A synthetic USD scenario with stable identifiers, amounts and ordering.
+/// RTP, FedNow, ACH and Fedwire are real rail names; all membership, fees and
+/// settlement times here are synthetic inputs, not those networks' operating rules.
 /// No clock, randomness, files, network calls, settlement or routing is involved.
 pub fn demo_network() -> Network {
     let institutions = [
@@ -18,22 +20,19 @@ pub fn demo_network() -> Network {
         opening_balance_cents,
     })
     .collect();
+    // FedNow reuses the synthetic instant inputs and member set used for RTP.
+    // This is a fixture choice, not a claim that the real networks are equivalent.
     let rails = [
+        ("RTP", "RTP", vec!["ALP", "BRK", "CDR", "DLT"], 25, 0),
+        ("FEDNOW", "FedNow", vec!["ALP", "BRK", "CDR", "DLT"], 25, 0),
         (
-            "FAST",
-            "Demo Instant",
-            vec!["ALP", "BRK", "CDR", "DLT"],
-            25,
-            0,
-        ),
-        (
-            "BATCH",
-            "Demo Batch",
+            "ACH",
+            "ACH",
             vec!["ALP", "BRK", "CDR", "DLT", "ELM", "FLD"],
             5,
             1_440,
         ),
-        ("WIRE", "Demo Wire", vec!["ALP", "DLT", "ELM"], 1_500, 30),
+        ("FEDWIRE", "Fedwire", vec!["ALP", "DLT", "ELM"], 1_500, 30),
     ]
     .into_iter()
     .map(
@@ -90,7 +89,7 @@ mod tests {
             network.statistics(),
             Statistics {
                 institution_count: 6,
-                rail_count: 3,
+                rail_count: 4,
                 payment_count: 12,
                 opening_balance_cents: 100_000_000,
                 payment_volume_cents: 22_500_150,
