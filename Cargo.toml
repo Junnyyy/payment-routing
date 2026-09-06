@@ -5,5 +5,9 @@ edition = "2024"
 publish = false
 description = "A deterministic payment-network explorer"
 
+[features]
+# Counters only; never changes search decisions. Off for timing measurements.
+search-stats = []
+
 [dependencies]
 ratatui = { version = "=0.30.0", default-features = false, features = ["crossterm", "layout-cache"] }

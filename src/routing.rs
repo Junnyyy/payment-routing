@@ -66,6 +66,7 @@ pub fn route_payment(
     network: &Network,
     payment: &Payment,
 ) -> Result<Option<Route>, ValidationError> {
+    crate::count_search!(solver_calls, 1);
     network.validate()?;
     payment.validate(network)?;
     let mut best = None;
@@ -92,18 +93,23 @@ fn visit<'a>(
     path: &mut Route,
     best: &mut Option<Route>,
 ) {
+    crate::count_search!(path_states, 1);
     if let Some(deadline) = payment.max_delivery_minutes
         && path.total_settlement_minutes > u128::from(deadline)
     {
+        crate::count_search!(deadline_prunes, 1);
         return;
     }
     // Strict cost pruning preserves equal-cost candidates that can win a tie.
     if let Some(route) = best.as_ref()
         && path.total_fee_cents > route.total_fee_cents
     {
+        crate::count_search!(bound_prunes, 1);
         return;
     }
     if current == payment.receiver {
+        crate::count_search!(candidates, 1);
+        crate::count_search!(candidate_hops, path.hops.len() as u64);
         let improves = match best {
             Some(route) => path.rank() < route.rank(),
             None => true,

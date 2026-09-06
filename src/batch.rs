@@ -65,6 +65,7 @@ pub fn optimize_batch(
     network: &Network,
     payments: &[Payment],
 ) -> Result<Option<BatchPlan>, ValidationError> {
+    crate::count_search!(solver_calls, 1);
     network.validate()?;
     unique_ids("batch payment", payments.iter().map(|p| p.id.as_str()))?;
     for payment in payments {
@@ -177,7 +178,10 @@ struct PathSearch<'a> {
 
 impl<'a> PathSearch<'a> {
     fn visit(&mut self, at: &'a str) {
+        crate::count_search!(path_states, 1);
         if at == self.payment.receiver {
+            crate::count_search!(candidates, 1);
+            crate::count_search!(candidate_hops, self.route.hops.len() as u64);
             self.answers.push(Candidate {
                 route: self.route.clone(),
                 usage: self.usage.clone(),
@@ -206,6 +210,7 @@ impl<'a> PathSearch<'a> {
                 .max_delivery_minutes
                 .is_some_and(|d| elapsed > u128::from(d))
             {
+                crate::count_search!(deadline_prunes, 1);
                 continue;
             }
             for next in &rail.participants {
@@ -255,6 +260,7 @@ struct AssignmentSearch<'a> {
 
 impl AssignmentSearch<'_> {
     fn visit(&mut self, index: usize, score: Score) {
+        crate::count_search!(assignment_states, 1);
         // Even unconstrained cheapest remaining routes cannot rescue this prefix.
         // Equality must remain searchable to preserve the documented tie-breaks.
         if self
@@ -262,9 +268,11 @@ impl AssignmentSearch<'_> {
             .as_ref()
             .is_some_and(|best| score.fee + self.remaining_fee[index] > best.score.fee)
         {
+            crate::count_search!(bound_prunes, 1);
             return;
         }
         if index == self.candidates.len() {
+            crate::count_search!(complete_assignments, 1);
             let improves = self.best.as_ref().is_none_or(|best| {
                 score < best.score
                     || (score == best.score && self.lexically_less(&self.chosen, &best.indices))
@@ -286,6 +294,7 @@ impl AssignmentSearch<'_> {
                 .zip(&candidate.usage)
                 .any(|((cap, used), amount)| cap.is_some_and(|c| used + amount > u128::from(c)))
             {
+                crate::count_search!(capacity_rejects, 1);
                 continue;
             }
             let next = Score {

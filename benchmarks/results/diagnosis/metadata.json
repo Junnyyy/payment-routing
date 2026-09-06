@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "command": [
+    "scripts/benchmark.py",
+    "--manifest",
+    "benchmarks/suites/diagnosis.json",
+    "--output",
+    "benchmarks/results/diagnosis",
+    "--repeats",
+    "3",
+    "--timeout",
+    "2",
+    "--rss-mib",
+    "512"
+  ],
+  "utc": "2026-09-06T21:06:51Z",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "machine": "arm64",
+  "cpu_count": 18,
+  "processor": "Apple M5 Pro",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6",
+  "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+  "python": "3.9.6 (default, May 22 2026, 11:13:45) \n[Clang 21.0.0 (clang-2100.1.1.101)]",
+  "git_head": "bae31e00141f399c3b006c44a25d523bebd5682b",
+  "git_status": "",
+  "source_sha256": "85eba07283a11cf2eb700f272e0f2b273c33b31d48f971ab3c527ea8ea2dec5e",
+  "lock_sha256": "679715f227c5c1cb14f19f8e03b1055aa0eb9cba34ce1c0c8ae52508eecb24f0",
+  "binary_sha256": {
+    "plain": "ebff3e9200014ef2c62099f479da23d86d9e27e2100bbe2eaaf4728b4b73c54f",
+    "stats": "262ae7705f5d0330ddb5e7ede90e1086960f6b3cdb0be18ecc82be19885c3e8e"
+  },
+  "timeout_seconds": 2.0,
+  "rss_limit_mib": 512,
+  "rss_sampling_seconds": 0.1,
+  "manifest": {
+    "schema": 1,
+    "description": "Explain participant-order effect; bracket remaining exponential frontiers; certify feasible censored windows; correct history harness argument bound",
+    "cases": [
+      {
+        "family": "single-positive",
+        "scale": 64
+      },
+      {
+        "family": "single-positive",
+        "scale": 96
+      },
+      {
+        "family": "single-positive",
+        "scale": 128
+      },
+      {
+        "family": "single-positive-first",
+        "scale": 64
+      },
+      {
+        "family": "single-positive-first",
+        "scale": 96
+      },
+      {
+        "family": "single-positive-first",
+        "scale": 128
+      },
+      {
+        "family": "batch-scarce",
+        "scale": 29
+      },
+      {
+        "family": "batch-infeasible",
+        "scale": 30
+      },
+      {
+        "family": "batch-choices",
+        "scale": 9
+      },
+      {
+        "family": "batch-choices",
+        "scale": 10
+      },
+      {
+        "family": "batch-choices",
+        "scale": 11
+      },
+      {
+        "family": "schedule-reverse-deadline",
+        "scale": 14
+      },
+      {
+        "family": "schedule-reverse-deadline",
+        "scale": 15
+      },
+      {
+        "family": "sim-history",
+        "scale": 100000,
+        "ticks": 10000
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 4,
+        "seed": 0
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 4,
+        "seed": 42
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 4,
+        "seed": 99
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 5,
+        "seed": 0
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 5,
+        "seed": 42
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 5,
+        "seed": 99
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 6,
+        "seed": 0
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 6,
+        "seed": 42
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 6,
+        "seed": 99
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 8,
+        "seed": 0
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 8,
+        "seed": 42
+      },
+      {
+        "family": "window-contended-schedule",
+        "scale": 8,
+        "seed": 99
+      }
+    ]
+  }
+}

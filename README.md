@@ -315,6 +315,15 @@ in-flight deadline handling, reproducible random sampling, capacity meanings,
 storage bounds, and measured verification. Static batch capacities must be
 unlimited for this API; recurring budgets are configured separately.
 
+## Benchmarks
+
+The [benchmark report](docs/benchmark-report.md) measures deterministic adversarial
+fixtures and seeded simulation windows, including observed time/memory frontiers,
+objective quality, search effort, capacity saturation and queue behavior. See the
+[fixture catalog and reproduction commands](benchmarks/README.md) to rerun or extend
+the suite. Timings use ordinary release builds; opt-in `search-stats` counters run
+separately. Optimizer strategy is unchanged.
+
 ## Code layout
 
 - `src/network.rs`: terminal-independent records, reference validation and exact aggregate calculations. Empty collections are supported. Totals use `u128` to safely sum `u64` amounts.

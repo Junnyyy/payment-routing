@@ -157,6 +157,7 @@ pub fn optimize_schedule(
     payments: &[TimedPayment],
     departures: &[RailDeparture],
 ) -> Result<Option<ScheduledBatchPlan>, ValidationError> {
+    crate::count_search!(solver_calls, 1);
     validate_schedule(network, payments, departures)?;
     let mut ordered: Vec<_> = payments.iter().collect();
     ordered.sort_unstable_by(|a, b| a.payment.id.cmp(&b.payment.id));
@@ -312,6 +313,7 @@ struct TimedPathSearch<'a> {
 
 impl<'a> TimedPathSearch<'a> {
     fn visit(&mut self, at: &'a str, ready: u64, fee: u128) {
+        crate::count_search!(path_states, 1);
         let elapsed = ready - self.payment.earliest_execution_minute;
         if self.payment.deadline_minute.is_some_and(|d| ready > d)
             || self
@@ -320,9 +322,12 @@ impl<'a> TimedPathSearch<'a> {
                 .max_delivery_minutes
                 .is_some_and(|d| elapsed > d)
         {
+            crate::count_search!(deadline_prunes, 1);
             return;
         }
         if at == self.payment.payment.receiver {
+            crate::count_search!(candidates, 1);
+            crate::count_search!(candidate_hops, self.hops.len() as u64);
             self.answers.push(Candidate {
                 route: ScheduledRoute {
                     hops: self.hops.clone(),
@@ -414,14 +419,17 @@ struct JointSearch<'a> {
 
 impl JointSearch<'_> {
     fn visit(&mut self, index: usize, score: Score) {
+        crate::count_search!(assignment_states, 1);
         if self
             .best
             .as_ref()
             .is_some_and(|b| score.plus(self.remaining[index]) > b.score)
         {
+            crate::count_search!(bound_prunes, 1);
             return;
         }
         if index == self.candidates.len() {
+            crate::count_search!(complete_assignments, 1);
             if self.best.as_ref().is_none_or(|b| {
                 score < b.score || (score == b.score && self.lexically_less(&b.indices))
             }) {
@@ -441,6 +449,7 @@ impl JointSearch<'_> {
                 .zip(&candidate.usage)
                 .any(|((cap, used), amount)| cap.is_some_and(|c| used + amount > u128::from(c)))
             {
+                crate::count_search!(capacity_rejects, 1);
                 continue;
             }
             let next = score.plus(candidate.score());

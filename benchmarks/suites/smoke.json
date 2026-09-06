@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "description": "Quick end-to-end harness verification with one case from each approach",
+  "cases": [
+    {
+      "family": "single-zero",
+      "scale": 5
+    },
+    {
+      "family": "batch-ties",
+      "scale": 8
+    },
+    {
+      "family": "batch-trap",
+      "scale": 2
+    },
+    {
+      "family": "schedule-contention",
+      "scale": 4
+    },
+    {
+      "family": "schedule-nonfifo",
+      "scale": 2
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 2
+    },
+    {
+      "family": "sim-pinned",
+      "scale": 2,
+      "ticks": 100
+    },
+    {
+      "family": "sim-load",
+      "scale": 16,
+      "ticks": 100
+    }
+  ]
+}
