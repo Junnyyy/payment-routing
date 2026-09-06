@@ -5,3 +5,4 @@ pub mod demo;
 pub mod network;
 pub mod routing;
 pub mod scheduling;
+pub mod simulation;

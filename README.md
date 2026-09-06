@@ -1,6 +1,6 @@
 # payment-routing
 
-A small Rust application for exploring a deterministic, synthetic payment network in a Ratatui terminal interface. Browse institutions, shared payment rails, payment instructions and aggregate statistics. The terminal-independent library also provides exact single-payment, shared-capacity batch, and scheduled batch routing.
+A small Rust application for exploring a deterministic, synthetic payment network in a Ratatui terminal interface. Browse institutions, shared payment rails, payment instructions and aggregate statistics. The terminal-independent library also provides exact single-payment, shared-capacity batch, scheduled batch routing, and a continuous seeded execution simulator.
 
 Run from this directory with Rust and Cargo installed (verified with Rust/Cargo 1.97.1):
 
@@ -268,6 +268,53 @@ cutoff, sampling or external solver is present. Infeasibility is always relative
 to the supplied finite timetable. There is no modeled liquidity, netting, payment
 splitting or real settlement.
 
+## Continuous simulation
+
+`simulation::Simulator` generates seeded payment arrivals, routes them with the
+existing static router, and executes hops against recurring rail availability and
+shared per-minute principal budgets. It tracks queued and in-flight payments,
+inclusive deadlines, actual executed fees, completed volume and SLA failures.
+Routing is a simple FIFO policy with pinned paths; accepted routes can miss their
+deadlines while waiting for downstream service or capacity.
+
+Run the headless example, optionally specifying a tick count and seed:
+
+```sh
+cargo run --locked --example simulate -- 10000 42
+```
+
+This example uses the six-institution topology with explicitly accelerated,
+synthetic ACH/Fedwire latencies and recurring service windows. It asserts every
+event and the final state match between manual and paced/paused stepping, then
+checks a restart from the same seed. It does not initialize a terminal.
+
+Build a `Scenario` from a validated network, an `ArrivalProcess`, one `RailService`
+per rail, `RoutingStrategy::CheapestStatic`, and active/history limits. Construct
+`Simulator::new(scenario, seed)`, then use these controls:
+
+| API | Behavior |
+| --- | --- |
+| `start()` / `pause()` | Set the driver run flag; neither advances time. |
+| `tick()` | Advance one minute while running; return `None` while paused. |
+| `step()` | Advance exactly one minute regardless of the run flag. |
+| `advance_ticks(n)` | Repeat manual steps without accumulating reports. |
+| `restart(seed)` | Reset all runtime state and return to paused. |
+| `metrics()` / `active_payments()` / `rail_states()` | Inspect read-only runtime state. |
+| `recent_events()` | Inspect bounded recent history; each step also returns its full event batch. |
+| `check_invariants()` | Check conservation, deadlines and capacity; also runs before every tick commits. |
+
+The caller determines speed by pacing ticks; no wall clock enters the model. There
+is no end horizon or accumulating timetable. Explicit admission limits bound the
+active set, terminal payments are discarded, and a ring bounds event history.
+Overload rejections and expiry remain in cumulative metrics. Checked `u128` time
+and totals fail the entire tick atomically at numeric exhaustion. Opening balances
+stay descriptive; this does not model liquidity, netting or real transfers.
+
+See [the simulation contract](docs/simulation.md) for precise event order,
+in-flight deadline handling, reproducible random sampling, capacity meanings,
+storage bounds, and measured verification. Static batch capacities must be
+unlimited for this API; recurring budgets are configured separately.
+
 ## Code layout
 
 - `src/network.rs`: terminal-independent records, reference validation and exact aggregate calculations. Empty collections are supported. Totals use `u128` to safely sum `u64` amounts.
@@ -275,6 +322,7 @@ splitting or real settlement.
 - `src/routing.rs`: exact single-payment routing, independent of terminal rendering.
 - `src/batch.rs`: exact joint routing, static shared-capacity accounting and canonical batch results.
 - `src/scheduling.rs`: finite timetables, timed constraints, exact joint routing/scheduling and execution-plan witnesses.
+- `src/simulation.rs` and `src/simulation/`: seeded arrivals, recurring services, execution, bounded state, accounting invariants and clock-independent controls.
 - `src/lib.rs`: exports the domain and fixture for reuse without UI types.
 - `src/app.rs`: selected view, per-table state and keyboard handling.
 - `src/ui.rs`: Ratatui widgets and money formatting.
@@ -291,6 +339,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo run --locked --example route_one
 cargo run --locked --example route_batch
 cargo run --locked --example schedule_batch
+cargo run --locked --example simulate -- 10000 42
 cargo run --locked -- --demo
 ```
 
