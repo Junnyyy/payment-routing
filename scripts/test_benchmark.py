@@ -16,6 +16,13 @@ class SupervisorTests(unittest.TestCase):
         result = benchmark.supervise([sys.executable, '-c', 'raise RuntimeError("test")'], 2, 512)
         self.assertEqual(result['status'], 'error')
 
+    def test_rss_guard_stops_and_reaps_a_large_worker(self):
+        result = benchmark.supervise([sys.executable, '-c',
+            'import time; x = bytearray(64 * 1024 * 1024); time.sleep(5)'], 2, 32)
+        self.assertEqual(result['status'], 'rss_limit')
+        self.assertEqual(result['exit_code'], -9)
+        self.assertGreater(result['peak_rss_bytes'], 32 * 1024 * 1024)
+
     def test_replay_check_ignores_timing_but_rejects_witness_changes(self):
         rows = [dict(status='optimal', mode=m, input={'input_digest':'a'},
                      result={'solve_ns':i, 'result_digest':'b'})

@@ -1,0 +1,48 @@
+--- a/benchmarks/fixtures.rs
++++ b/benchmarks/fixtures.rs
+@@ -322,17 +322,16 @@
+     let mut timed = vec![];
+     for _ in 0..start + width as u64 {
+         for e in sim.step().unwrap().events {
+-            if e.minute >= u128::from(start) {
+-                if let EventKind::Generated {
++            if e.minute >= u128::from(start)
++                && let EventKind::Generated {
+                     payment, deadline, ..
+                 } = e.kind
+-                {
+-                    timed.push(TimedPayment {
+-                        payment,
+-                        earliest_execution_minute: e.minute as u64,
+-                        deadline_minute: Some(deadline as u64),
+-                    });
+-                }
++            {
++                timed.push(TimedPayment {
++                    payment,
++                    earliest_execution_minute: e.minute as u64,
++                    deadline_minute: Some(deadline as u64),
++                });
+             }
+         }
+     }
+--- a/scripts/benchmark.py
++++ b/scripts/benchmark.py
+@@ -36,6 +36,8 @@
+                     # ps reports KiB on both supported platforms. Sampling can overshoot.
+                     sample = subprocess.run(["ps", "-o", "rss=", "-p", str(child.pid)],
+                                             capture_output=True, text=True, check=False)
++                    if sample.returncode != 0 and sample.stderr.strip():
++                        raise RuntimeError("RSS guard unavailable: " + sample.stderr.strip())
+                     if sample.stdout.strip() and int(sample.stdout.strip()) > rss_mib * 1024:
+                         reason = "rss_limit"
+                     last_sample = now
+@@ -144,6 +146,8 @@
+         parser.error("resource normalization supports macOS and Linux only")
+     if args.repeats < 1 or args.timeout <= 0 or args.rss_mib < 32:
+         parser.error("positive repeats/timeout and at least 32 MiB required")
++    # Fail before creating results if the host sandbox denies the RSS guard.
++    subprocess.run(["ps", "-o", "rss=", "-p", str(os.getpid())], check=True, capture_output=True)
+     manifest = json.loads(args.manifest.read_text())
+     args.output.mkdir(parents=True, exist_ok=False)
+     binaries = {}

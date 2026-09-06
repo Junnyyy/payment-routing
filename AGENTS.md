@@ -1,5 +1,7 @@
 # Project guidance
 
+- The reproducible benchmark suite lives in `benchmarks/`, with `scripts/benchmark.py` supervising fresh workers. Preserve censored/error observations and distinguish solver time from whole-worker CPU/RSS. The 512 MiB RSS guard is sampled and can overshoot; `ps`/CPU metadata need host access on macOS. Never call a timeout infeasible. Window projections exclude carry-in/background demand; their independently audited one-rail certificates prove feasibility/minimum fee only, not the full elapsed/lexical optimum.
+- Measured search sensitivity includes equal-fee assignments, late incumbent discovery from participant ordering, reversed deadline-to-ID ordering, and candidate resource-vector storage. Simulation queue samples occur after ticks and can be zero during in-flight SLA failures. See `docs/benchmark-report.md`; thresholds are specific to the recorded machine/limits, not general capacity promises.
 - Benchmark instrumentation is opt-in with `search-stats`; ordinary builds compile out every counter expression. Use separate release builds for timings and counters and compare deterministic results. Counters are calling-thread aggregates, reset explicitly, and never affect pruning or termination. See `docs/benchmark-method.md`.
 
 - Keep `src/network.rs` and `src/demo.rs` independent of Ratatui and Crossterm. The library owns data, validation and aggregate calculations; the binary owns interaction and rendering.

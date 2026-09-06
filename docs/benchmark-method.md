@@ -139,3 +139,10 @@ failed observations remain in the raw log and are excluded from performance
 claims. The diagnosis run permits the intended 100,000-event history limit for
 this family and reruns it. The driver reports worker errors and exits nonzero
 while preserving all other cases and summaries.
+
+The pilot's recorded dirty source state is recoverable using
+`benchmarks/results/pilot/working-tree.patch` on its recorded Git revision. The
+patch was reconstructed from the two tracked harness edits and verified to
+reproduce the recorded combined source SHA-256 exactly. Frontier and diagnosis
+were measured from clean source commits. Preserve a source patch or commit before
+new measurement runs if exact historical source recovery matters.
