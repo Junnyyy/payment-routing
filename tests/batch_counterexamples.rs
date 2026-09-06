@@ -45,3 +45,16 @@ fn greedy_can_report_infeasible_when_the_batch_is_feasible() {
         4
     );
 }
+
+#[test]
+fn cheap_multihop_route_must_yield_a_contested_rail_to_an_urgent_payment() {
+    let (net, payments) = multihop_trap();
+    // The independent bounded-walk oracle also includes cyclic witnesses;
+    // production needs only the three/two simple route alternatives.
+    assert_eq!(greedy(&net, &payments).unwrap().fee, 11);
+    assert_eq!(exhaustive(&net, &payments).unwrap().fee, 4);
+    let plan = optimize_batch(&net, &payments).unwrap().unwrap();
+    assert_eq!(plan.total_fee_cents, 4);
+    assert_eq!(plan.assignments[0].route.hops[0].rail_id, "backup-ad");
+    assert_eq!(plan.assignments[1].route.hops[0].rail_id, "cheap-bc");
+}

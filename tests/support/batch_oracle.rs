@@ -192,3 +192,20 @@ pub fn greedy_trap() -> (Network, Vec<Payment>) {
         vec![payment("P1", "A", "B", 1), payment("P2", "A", "B", 2)],
     )
 }
+
+pub fn multihop_trap() -> (Network, Vec<Payment>) {
+    let net = network(
+        &["A", "B", "C", "D"],
+        vec![
+            rail("ab", &["A", "B"], 0, 1, None),
+            rail("cheap-bc", &["B", "C"], 1, 0, Some(1)),
+            rail("cd", &["C", "D"], 0, 1, None),
+            rail("backup-ad", &["A", "D"], 3, 1, None),
+            rail("fallback-bc", &["B", "C"], 10, 0, None),
+        ],
+    );
+    let mut payments = vec![payment("P1", "A", "D", 1), payment("P2", "B", "C", 1)];
+    // Prevent P2's slower B-A-D-C bypass: its only valid paths are the two B-C rails.
+    payments[1].max_delivery_minutes = Some(0);
+    (net, payments)
+}
