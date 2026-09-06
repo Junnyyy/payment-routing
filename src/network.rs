@@ -18,14 +18,15 @@ pub struct Rail {
     pub participants: Vec<String>,
     pub fee_cents: u64,
     pub settlement_minutes: u32,
-    /// Static availability for this snapshot; no schedules or waiting are modeled.
+    /// Base availability: false is a hard veto, including with a timetable.
     pub available: bool,
     /// Inclusive ceiling on the USD principal of each hop, excluding fees.
     /// None means no ceiling; a represented ceiling must be positive.
     pub max_amount_cents: Option<u64>,
     /// Synthetic principal budget shared by every hop in one optimization batch,
     /// across all members and both directions. Fees do not consume this budget.
-    /// None means unlimited; Some(0) permits no use. Only batch routing enforces it.
+    /// None means unlimited; Some(0) permits no use. Static and scheduled batch
+    /// optimization enforce it; single-payment static routing does not.
     pub batch_capacity_cents: Option<u64>,
 }
 
@@ -36,7 +37,9 @@ pub struct Payment {
     pub sender: String,
     pub receiver: String,
     pub amount_cents: u64,
-    /// Inclusive end-to-end latency budget; None means no delivery deadline.
+    /// Inclusive delivery budget. Static routing sums hop latency; scheduled
+    /// routing measures elapsed time from release, including all waiting.
+    /// None adds no relative deadline.
     pub max_delivery_minutes: Option<u64>,
 }
 
