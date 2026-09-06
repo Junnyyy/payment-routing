@@ -6,3 +6,17 @@ pub mod network;
 pub mod routing;
 pub mod scheduling;
 pub mod simulation;
+
+#[cfg(feature = "search-stats")]
+pub mod search_stats;
+
+// Compiles away entirely in ordinary builds, including the value expression.
+macro_rules! count_search {
+    ($field:ident, $value:expr) => {
+        #[cfg(feature = "search-stats")]
+        crate::search_stats::record(|stats| {
+            stats.$field = stats.$field.saturating_add($value);
+        });
+    };
+}
+pub(crate) use count_search;

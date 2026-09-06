@@ -1,5 +1,7 @@
 # Project guidance
 
+- Benchmark instrumentation is opt-in with `search-stats`; ordinary builds compile out every counter expression. Use separate release builds for timings and counters and compare deterministic results. Counters are calling-thread aggregates, reset explicitly, and never affect pruning or termination. See `docs/benchmark-method.md`.
+
 - Keep `src/network.rs` and `src/demo.rs` independent of Ratatui and Crossterm. The library owns data, validation and aggregate calculations; the binary owns interaction and rendering.
 - This foundation is synthetic and USD-only. Amounts are integer cents (`u64`); aggregate sums use `u128`. Opening balances are input data, never reduced by loading or viewing payments.
 - Rails describe shared services and explicit membership, not directed graph edges. Payments are unassigned instructions; validation does not promise a feasible route or sufficient liquidity.
