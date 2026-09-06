@@ -9,6 +9,8 @@ pub struct Institution {
 }
 
 /// A shared payment service and its member institutions, not a computed route.
+/// A recognizable name does not imply verified real-world operating rules.
+/// Demo membership, fees and settlement times are explicitly synthetic inputs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rail {
     pub id: String,

@@ -25,18 +25,29 @@ Each table remembers its selected row and scrolls to keep it visible. Run `cargo
 
 ## Demo scenario
 
-All institutions and rail terms are fictional. All money is USD, stored as integer cents. Loading the fixture always produces the same records in the same order.
+Institutions are fictional. The demo uses recognizable U.S. payment-rail names: **RTP, FedNow, ACH and Fedwire**. All rail membership, topology, fees and settlement times are synthetic scenario inputs, not verified real-world network data or operating rules. Capacity limits, availability schedules and other network rules are not modeled. All money is USD, stored as integer cents. Loading the fixture always produces the same records in the same order.
 
 | Statistic | Expected value |
 | --- | ---: |
 | Institutions | 6 |
-| Payment rails | 3 |
+| Payment rails | 4 |
 | Payments awaiting routing | 12 |
 | Opening liquidity | USD 1,000,000.00 |
 | Payment volume | USD 225,001.50 |
 | Largest payment | USD 75,000.00 |
 
-The institutions view shows identifiers, names and opening balances. Rails show their members, fixed fee inputs and settlement minutes (0 means immediate in this fictional scenario). Payments show sender and receiver institution IDs, amounts and their awaiting-routing state. The overview computes its totals from the loaded data.
+The institutions view shows identifiers, names and opening balances. Rails show their members, fixed fee inputs and settlement minutes (0 means immediate only in this synthetic scenario). Payments show sender and receiver institution IDs, amounts and their awaiting-routing state. The overview computes its totals from the loaded data.
+
+The rails appear in this stable order. **Every membership, fee and timing value below is synthetic.**
+
+| ID | Display name | Synthetic members | Synthetic fee (USD) | Synthetic settlement minutes |
+| --- | --- | --- | ---: | ---: |
+| RTP | RTP | ALP, BRK, CDR, DLT | 0.25 | 0 |
+| FEDNOW | FedNow | ALP, BRK, CDR, DLT | 0.25 | 0 |
+| ACH | ACH | ALP, BRK, CDR, DLT, ELM, FLD | 0.05 | 1440 |
+| FEDWIRE | Fedwire | ALP, DLT, ELM | 15.00 | 30 |
+
+RTP, ACH and Fedwire retain the existing instant, batch and wire fixture inputs respectively. FedNow is a fourth rail that reuses the synthetic instant membership, fee and timing inputs. The shared values are a demo choice and do not imply that RTP and FedNow operate identically. Institutions, balances and payment instructions are unchanged.
 
 Payments are unassigned instructions. The application does not choose routes, assess feasibility, incur fees, move funds or settle payments. There is no routing optimization or external optimization solver. Scenario-file import, multiple currencies and execution are outside this foundation.
 
@@ -62,8 +73,8 @@ cargo run --locked -- --demo
 
 Tests cover deterministic fixture totals, invalid references and amounts, wide aggregate sums, keyboard navigation and quit handling, CLI process behavior, and actual Ratatui `TestBackend` rendering at 80 × 18 and 80 × 24. They also check scrolling, empty views and small-terminal rendering.
 
-For the interactive check, compare the overview with the table above, visit all four views, use End in Payments to select P012, then Home to return to P001. Quit and confirm the normal shell returns. Repeat with Esc and Ctrl-C to verify each exit path. A real pseudo-terminal launch and terminal-mode comparison are required when changing lifecycle code; buffer tests alone cannot verify cleanup.
+For the interactive check, compare the overview with the statistics table above and visit all four views. Confirm that Rails shows all four names and complete IDs, the synthetic-input label, and the rail values listed above at both 80 × 18 and 80 × 24. Use End in Rails to select Fedwire. Use End in Payments to select P012, then Home to return to P001. Quit and confirm the normal shell returns. Repeat with Esc and Ctrl-C to verify each exit path. A real pseudo-terminal launch and terminal-mode comparison are required when changing lifecycle code; buffer tests alone cannot verify cleanup.
 
-Foundation verification on macOS with Rust/Cargo 1.97.1: all 20 tests passed, formatting passed, and Clippy passed with warnings denied. The documented demo command launched at 80 × 24 and 80 × 18; navigation and payment scrolling worked. Separate q, Esc and Ctrl-C runs each exited with status 0, emitted alternate-screen cleanup, and left `stty -g` identical to its value before launch.
+Rail vocabulary verification on 2026-09-06 on macOS with Rust/Cargo 1.97.1: all 20 tests passed, formatting passed, and Clippy passed with warnings denied. The documented demo command launched at 80 × 24 and 80 × 18; all four rail identities and synthetic inputs displayed, navigation and payment scrolling worked. Separate q, Esc and Ctrl-C runs each exited with status 0, emitted alternate-screen cleanup, and left `stty -g` identical to its value before launch.
 
 Version-specific API references retrieved through Context7: [Terminal initialization and restoration (`src/init.rs`)](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/src/init.rs), [Table construction and layout-cache changes (`BREAKING-CHANGES.md`)](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/BREAKING-CHANGES.md), and [Crossterm version re-export (`ratatui-crossterm/README.md`)](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/ratatui-crossterm/README.md).
