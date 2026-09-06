@@ -4,3 +4,4 @@ pub mod batch;
 pub mod demo;
 pub mod network;
 pub mod routing;
+pub mod scheduling;

@@ -83,7 +83,7 @@ pub struct Statistics {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValidationError(String);
+pub struct ValidationError(pub(crate) String);
 
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
