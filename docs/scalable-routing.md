@@ -84,3 +84,24 @@ The online cohort has zero SLA and an unlimited expensive fallback, so every
 payment completes within its release tick; no carry-in or unfinished work is
 omitted from that comparison. These are narrow online quality cases, not claims
 of clairvoyant performance with future arrivals.
+
+## Round 3: tighter bound and broader quality (source 326abc4)
+
+[Every gap](../benchmarks/results/strategy-refined/gaps.json). All 103 certified
+feasible schedules returned full plans. Median gap is 0%; seed 40 / five mixed
+payments has 1.80% gap and seed 60 has 67.72% (213 versus 127 cents). The latter
+allocates three of four cheap principal units to two payments, forcing a
+large payment onto the 100-cent fallback. The optimum moves one small payment
+onto a 14-cent multihop route, freeing two units for the large payment. Four
+whole-batch orders miss this exchange. This is the next quality experiment:
+try at most 16 pairs, each in both orders, against all other fixed reservations.
+Only groups of at most 16 enter this repair pass; larger groups retain bounded
+order trials. Earlier online commitments are never reconsidered.
+
+Dense simulation now takes 14.69 / 28.03 / 56.52 ms per 1,000 ticks at 128 / 256 /
+512 institutions. At 512 the observed p95 tick is 84.9 microseconds and peak
+whole-worker RSS 3.4 MiB. The exact static-policy nine-institution control still
+hits the two-second worker guard. Scheduled ties at 2,048 payments take 1.80 ms;
+512 unit slots take 26.61 ms; a three-hop 1,024-slot timetable takes 8.66 ms.
+All 16 exact same-cohort online comparisons have zero fee gap. Online output
+contains the exact fee and gap for both the static and reserved policies.

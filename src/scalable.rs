@@ -18,6 +18,8 @@ pub struct SearchLimits {
     pub max_labels: usize,
     pub max_expansions: usize,
     pub max_candidates: usize,
+    /// Pair trials for groups of at most 16 requests; zero disables repair.
+    pub max_repairs: usize,
 }
 impl Default for SearchLimits {
     fn default() -> Self {
@@ -26,6 +28,7 @@ impl Default for SearchLimits {
             max_labels: 8192,
             max_expansions: 4096,
             max_candidates: 100_000,
+            max_repairs: 16,
         }
     }
 }
@@ -48,6 +51,7 @@ pub struct SearchDiagnostics {
     pub candidates: u128,
     pub truncated_searches: u128,
     pub unresolved: u128,
+    pub repair_trials: u128,
 }
 impl SearchDiagnostics {
     pub(crate) fn plus(&mut self, other: Self) {
@@ -58,6 +62,7 @@ impl SearchDiagnostics {
             .truncated_searches
             .saturating_add(other.truncated_searches);
         self.unresolved = self.unresolved.saturating_add(other.unresolved);
+        self.repair_trials = self.repair_trials.saturating_add(other.repair_trials);
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -672,6 +677,56 @@ impl Router {
                 best = Some(plans);
             }
         }
-        (best.unwrap_or_default(), diagnostics)
+        let mut best = best.unwrap_or_default();
+        // Bounded neighborhood search. Prior-tick commitments in `initial` are
+        // never removed. Large queues skip repair to protect repeated decisions.
+        let fees: Vec<_> = best.iter().flatten().map(|j| j.fee).collect();
+        if requests.len() <= 16
+            && (best.iter().any(Option::is_none) || fees.iter().min() != fees.iter().max())
+        {
+            let mut expensive: Vec<_> = (0..requests.len()).collect();
+            expensive.sort_by_key(|&i| Reverse(best[i].as_ref().map_or(u128::MAX, |j| j.fee)));
+            let mut tried = std::collections::BTreeSet::new();
+            'repair: for i in expensive {
+                for j in 0..requests.len() {
+                    if i == j || !tried.insert((i.min(j), i.max(j))) {
+                        continue;
+                    }
+                    if diagnostics.repair_trials >= limits.max_repairs as u128 {
+                        break 'repair;
+                    }
+                    diagnostics.repair_trials += 1;
+                    let mut fixed = initial.clone();
+                    for (k, plan) in best.iter().enumerate() {
+                        if k != i
+                            && k != j
+                            && let Some(plan) = plan
+                        {
+                            self.reserve(&mut fixed, plan, requests[k].payment.amount_cents);
+                        }
+                    }
+                    for order in [[i, j], [j, i]] {
+                        let mut book = fixed.clone();
+                        let mut candidate = best.clone();
+                        candidate[i] = None;
+                        candidate[j] = None;
+                        for k in order {
+                            let r = &requests[k];
+                            let (journey, stats) =
+                                self.find(r.payment, r.release, r.deadline, &book, limits);
+                            diagnostics.plus(stats);
+                            if let Some(ref journey) = journey {
+                                self.reserve(&mut book, journey, r.payment.amount_cents);
+                            }
+                            candidate[k] = journey;
+                        }
+                        if (score(&candidate), &candidate) < (score(&best), &best) {
+                            best = candidate;
+                        }
+                    }
+                }
+            }
+        }
+        (best, diagnostics)
     }
 }

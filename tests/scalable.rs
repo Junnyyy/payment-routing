@@ -94,3 +94,34 @@ fn sparse_recurring_reservations_do_not_expand_a_huge_deadline() {
     assert!(s.reservation_entries() <= 1);
     assert!(s.routing_diagnostics().candidates < 1000);
 }
+
+#[allow(dead_code)]
+#[path = "../benchmarks/quality.rs"]
+mod quality;
+#[test]
+fn pair_repair_fixes_measured_scarcity_trap_without_changing_fixed_capacity() {
+    let c = quality::case("schedule-mixed", 5, 60);
+    let before = plan_schedule(
+        &c.network,
+        &c.timed,
+        &c.slots,
+        SearchLimits {
+            max_repairs: 0,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(before.plan.unwrap().total_fee_cents, 213);
+    let after = plan_schedule(&c.network, &c.timed, &c.slots, Default::default()).unwrap();
+    assert!(after.diagnostics.repair_trials <= 16);
+    let plan = after.plan.unwrap();
+    audit::schedule(&c.network, &c.timed, &c.slots, &plan);
+    assert_eq!(plan.total_fee_cents, 127);
+    assert_eq!(
+        optimize_schedule(&c.network, &c.timed, &c.slots)
+            .unwrap()
+            .unwrap()
+            .total_fee_cents,
+        127
+    );
+}

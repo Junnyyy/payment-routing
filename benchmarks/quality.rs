@@ -129,3 +129,55 @@ pub fn online(seed: u64) -> payment_routing::simulation::Scenario {
     c.arrivals.max_sla_minutes = 0;
     c
 }
+
+pub fn mesh(size: usize, seed: u64) -> payment_routing::simulation::Scenario {
+    let mut c = simulation_case("sim-load", 8);
+    c.network = network(size);
+    for i in 0..size {
+        for jump in [1, 3] {
+            let j = (i + jump) % size;
+            c.network.rails.push(rail(
+                c.network.rails.len(),
+                vec![format!("N{i:03}"), format!("N{j:03}")],
+                (i as u64 + seed) % 3,
+                1,
+            ));
+        }
+    }
+    c.network.rails.push(rail(
+        c.network.rails.len(),
+        c.network
+            .institutions
+            .iter()
+            .map(|n| n.id.clone())
+            .collect(),
+        50,
+        1,
+    ));
+    c.services = c
+        .network
+        .rails
+        .iter()
+        .enumerate()
+        .map(|(i, r)| payment_routing::simulation::RailService {
+            rail_id: r.id.clone(),
+            period_minutes: 4,
+            offset_minutes: 0,
+            open_minutes: if i + 1 == c.network.rails.len() { 4 } else { 3 },
+            capacity_per_minute_cents: Some(if i + 1 == c.network.rails.len() {
+                100
+            } else {
+                4
+            }),
+        })
+        .collect();
+    c.arrivals.flows = (0..size)
+        .map(|i| payment_routing::simulation::PaymentFlow {
+            sender: format!("N{i:03}"),
+            receiver: format!("N{:03}", (i + size / 2) % size),
+        })
+        .collect();
+    c.arrivals.min_sla_minutes = 8;
+    c.arrivals.max_sla_minutes = 8;
+    c
+}

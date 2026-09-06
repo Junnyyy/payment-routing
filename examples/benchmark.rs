@@ -118,7 +118,9 @@ fn main() {
     meta.number("scale", scale);
     meta.number("seed", seed);
     if family.starts_with("sim-") {
-        let mut config = if family == "sim-quality" {
+        let mut config = if family == "sim-mesh" {
+            quality::mesh(scale, seed)
+        } else if family == "sim-quality" {
             quality::online(seed)
         } else {
             fixtures::simulation_case(family, scale)
