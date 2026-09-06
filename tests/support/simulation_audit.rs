@@ -146,7 +146,10 @@ impl Audit {
                                 && r.participants.contains(&hop.receiver)
                         );
                         assert!(visited.insert(hop.receiver.clone()));
-                        assert!(open(&hop.rail_id));
+                        assert!(r.available);
+                        if scenario.strategy == RoutingStrategy::CheapestStatic {
+                            assert!(open(&hop.rail_id));
+                        }
                         assert!(
                             r.max_amount_cents
                                 .is_none_or(|c| p.payment.amount_cents <= c)
@@ -184,6 +187,9 @@ impl Audit {
                         .unwrap();
                     assert_eq!(*fee_cents, r.fee_cents);
                     assert_eq!(*arrival_minute, minute + u128::from(r.settlement_minutes));
+                    if matches!(scenario.strategy, RoutingStrategy::Reserved { .. }) {
+                        assert!(*arrival_minute <= p.deadline);
+                    }
                     assert!(open(&hop.rail_id));
                     assert!(r.max_amount_cents.is_none_or(|c| *amount_cents <= c));
                     let amount = u128::from(*amount_cents);

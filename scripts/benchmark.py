@@ -81,11 +81,11 @@ def supervise(command, timeout, rss_mib):
 def deterministic_result(row):
     # All other result fields, including queue observations and counters, must replay.
     return {k: v for k, v in row["result"].items()
-            if k not in ("solve_ns", "instrumented")}
+            if k not in ("solve_ns", "instrumented", "tick_ns_p95", "tick_ns_max")}
 
 
 def verify_rows(rows):
-    complete = [r for r in rows if r["status"] in ("optimal", "infeasible", "simulated")]
+    complete = [r for r in rows if r["status"] in ("optimal", "infeasible", "simulated", "feasible", "unresolved")]
     fingerprints = {r["input"]["input_digest"] for r in rows if r["input"]}
     if len(fingerprints) > 1:
         raise AssertionError("input changed between repeats/builds")
@@ -101,7 +101,7 @@ def verify_rows(rows):
 
 def summary(rows):
     timing = [r for r in rows if r["mode"] == "plain"]
-    solved = [r for r in timing if r["status"] in ("optimal", "infeasible", "simulated")]
+    solved = [r for r in timing if r["status"] in ("optimal", "infeasible", "simulated", "feasible", "unresolved")]
     counted = next((r for r in rows if r["mode"] == "stats" and r["result"]), None)
     first = rows[0]
     out = {k: first[k] for k in ("family", "scale", "seed", "ticks")}
