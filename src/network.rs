@@ -18,6 +18,11 @@ pub struct Rail {
     pub participants: Vec<String>,
     pub fee_cents: u64,
     pub settlement_minutes: u32,
+    /// Static availability for this snapshot; no schedules or waiting are modeled.
+    pub available: bool,
+    /// Inclusive ceiling on the USD principal of each hop, excluding fees.
+    /// None means no ceiling; a represented ceiling must be positive.
+    pub max_amount_cents: Option<u64>,
 }
 
 /// An instruction awaiting routing. Loading or viewing it never moves funds.
@@ -27,6 +32,31 @@ pub struct Payment {
     pub sender: String,
     pub receiver: String,
     pub amount_cents: u64,
+    /// Inclusive end-to-end latency budget; None means no delivery deadline.
+    pub max_delivery_minutes: Option<u64>,
+}
+
+impl Payment {
+    /// Validate an instruction, including one not stored in the network.
+    /// Validity does not imply a route or sufficient funding.
+    pub fn validate(&self, network: &Network) -> Result<(), ValidationError> {
+        unique_ids("payment", std::iter::once(self.id.as_str()))?;
+        for endpoint in [&self.sender, &self.receiver] {
+            if !network.institutions.iter().any(|i| &i.id == endpoint) {
+                return Err(ValidationError(format!(
+                    "payment {} references unknown institution {endpoint}",
+                    self.id
+                )));
+            }
+        }
+        if self.amount_cents == 0 || self.sender == self.receiver {
+            return Err(ValidationError(format!(
+                "payment {} needs a positive amount and different endpoints",
+                self.id
+            )));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,6 +118,12 @@ impl Network {
                     rail.id
                 )));
             }
+            if rail.max_amount_cents == Some(0) {
+                return Err(ValidationError(format!(
+                    "rail {} transaction ceiling must be positive",
+                    rail.id
+                )));
+            }
             unique_ids(
                 &format!("participant in rail {}", rail.id),
                 rail.participants.iter().map(String::as_str),
@@ -102,20 +138,7 @@ impl Network {
             }
         }
         for payment in &self.payments {
-            for endpoint in [&payment.sender, &payment.receiver] {
-                if !institutions.contains(endpoint.as_str()) {
-                    return Err(ValidationError(format!(
-                        "payment {} references unknown institution {endpoint}",
-                        payment.id
-                    )));
-                }
-            }
-            if payment.amount_cents == 0 || payment.sender == payment.receiver {
-                return Err(ValidationError(format!(
-                    "payment {} needs a positive amount and different endpoints",
-                    payment.id
-                )));
-            }
+            payment.validate(self)?;
         }
         Ok(())
     }

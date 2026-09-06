@@ -42,6 +42,8 @@ pub fn demo_network() -> Network {
             participants: participants.into_iter().map(String::from).collect(),
             fee_cents,
             settlement_minutes,
+            available: true,
+            max_amount_cents: None,
         },
     )
     .collect();
@@ -65,6 +67,7 @@ pub fn demo_network() -> Network {
         sender: sender.into(),
         receiver: receiver.into(),
         amount_cents,
+        max_delivery_minutes: None,
     })
     .collect();
     Network {
