@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 settlement_minutes,
                 available: true,
                 max_amount_cents: None,
+                batch_capacity_cents: None,
             },
         )
         .collect(),

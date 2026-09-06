@@ -45,6 +45,7 @@ fn rail(id: usize, participants: Vec<String>, fee: u64, minutes: u32) -> Rail {
         settlement_minutes: minutes,
         available: true,
         max_amount_cents: None,
+        batch_capacity_cents: None,
     }
 }
 

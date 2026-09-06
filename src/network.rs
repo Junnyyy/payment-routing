@@ -23,6 +23,10 @@ pub struct Rail {
     /// Inclusive ceiling on the USD principal of each hop, excluding fees.
     /// None means no ceiling; a represented ceiling must be positive.
     pub max_amount_cents: Option<u64>,
+    /// Synthetic principal budget shared by every hop in one optimization batch,
+    /// across all members and both directions. Fees do not consume this budget.
+    /// None means unlimited; Some(0) permits no use. Only batch routing enforces it.
+    pub batch_capacity_cents: Option<u64>,
 }
 
 /// An instruction awaiting routing. Loading or viewing it never moves funds.
@@ -168,7 +172,7 @@ impl Network {
     }
 }
 
-fn unique_ids<'a>(
+pub(crate) fn unique_ids<'a>(
     kind: &str,
     ids: impl Iterator<Item = &'a str>,
 ) -> Result<HashSet<&'a str>, ValidationError> {
