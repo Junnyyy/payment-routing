@@ -169,3 +169,96 @@ pub fn schedule(
         );
     }
 }
+
+/// A cheap feasible witness for the suite's one-rail, unit-payment windows.
+/// Failure returns no certificate; it never declares general infeasibility.
+/// Each successful payment must pay the only rail's fee, so a full witness also
+/// certifies the minimum fee. This does not certify elapsed or lexical optimality.
+pub fn window_reference(
+    net: &Network,
+    payments: &[TimedPayment],
+    slots: &[RailDeparture],
+) -> Option<ScheduledBatchPlan> {
+    assert_eq!(net.institutions.len(), 2);
+    assert_eq!(net.rails.len(), 1);
+    assert!(payments.iter().all(|p| p.payment.amount_cents == 1));
+    let r = &net.rails[0];
+    let mut ordered: Vec<_> = payments.iter().collect();
+    ordered.sort_by_key(|p| {
+        (
+            p.earliest_execution_minute,
+            p.deadline_minute,
+            &p.payment.id,
+        )
+    });
+    let mut used = vec![0_u128; slots.len()];
+    let mut assignments = vec![];
+    for p in ordered {
+        let (i, s) = slots
+            .iter()
+            .enumerate()
+            .filter(|(i, s)| {
+                s.departure_minute >= p.earliest_execution_minute
+                    && s.capacity_cents.is_none_or(|c| used[*i] < u128::from(c))
+            })
+            .min_by_key(|(_, s)| s.departure_minute)?;
+        let arrival =
+            s.departure_minute + u64::from(s.settlement_minutes.unwrap_or(r.settlement_minutes));
+        if p.deadline_minute.is_some_and(|d| arrival > d)
+            || p.payment
+                .max_delivery_minutes
+                .is_some_and(|d| arrival - p.earliest_execution_minute > d)
+        {
+            return None;
+        }
+        used[i] += 1;
+        let fee = s.fee_cents.unwrap_or(r.fee_cents);
+        assignments.push(ScheduledPaymentRoute {
+            payment_id: p.payment.id.clone(),
+            route: ScheduledRoute {
+                hops: vec![ScheduledHop {
+                    transfer: payment_routing::routing::RouteHop {
+                        rail_id: r.id.clone(),
+                        sender: p.payment.sender.clone(),
+                        receiver: p.payment.receiver.clone(),
+                    },
+                    departure_minute: s.departure_minute,
+                    arrival_minute: arrival,
+                    fee_cents: fee,
+                }],
+                total_fee_cents: u128::from(fee),
+                elapsed_minutes: arrival - p.earliest_execution_minute,
+            },
+        });
+    }
+    assignments.sort_by(|a, b| a.payment_id.cmp(&b.payment_id));
+    let total = used.iter().sum();
+    if r.batch_capacity_cents
+        .is_some_and(|c| total > u128::from(c))
+    {
+        return None;
+    }
+    let plan = ScheduledBatchPlan {
+        total_fee_cents: assignments.iter().map(|a| a.route.total_fee_cents).sum(),
+        total_elapsed_minutes: assignments
+            .iter()
+            .map(|a| u128::from(a.route.elapsed_minutes))
+            .sum(),
+        assignments,
+        rail_usage: vec![payment_routing::batch::RailUsage {
+            rail_id: r.id.clone(),
+            principal_cents: total,
+        }],
+        departure_usage: slots
+            .iter()
+            .zip(used)
+            .map(|(s, principal_cents)| DepartureUsage {
+                rail_id: s.rail_id.clone(),
+                departure_minute: s.departure_minute,
+                principal_cents,
+            })
+            .collect(),
+    };
+    schedule(net, payments, slots, &plan);
+    Some(plan)
+}

@@ -123,3 +123,19 @@ windows use ten. `sim-pinned-direct` removes the cheap multihop option from the
 same seeded workload; it is a fixture control, not a new optimizer policy. In
 `sim-backlog`, service is closed and SLA is 10,000 minutes, keeping work active
 through the measured 1,000 ticks instead of expiring it after eight minutes.
+3. **Diagnosis** (`suites/diagnosis.json`): a positive-fee 64-institution clique
+   visited 3,657,320 path states despite its direct route. Rotate the receiver to
+   the start of the rail's participant list, preserving the optimization problem,
+   and compare full answers. Several contended windows timed out, so construct and
+   independently audit a cheap one-rail FIFO schedule outside the timed solver.
+   A successful witness establishes feasibility and minimum fee (every payment
+   must use the only rail); it does not certify elapsed/lexical optimality. A failed
+   certificate does not declare infeasibility. Narrow the remaining route-choice,
+   capacity and deadline-order boundaries.
+
+The frontier run exposed one **harness input error**, not a solver failure:
+`sim-history 100000` exceeded the worker's generic 10,000 scale assertion. All four
+failed observations remain in the raw log and are excluded from performance
+claims. The diagnosis run permits the intended 100,000-event history limit for
+this family and reruns it. The driver reports worker errors and exits nonzero
+while preserving all other cases and summaries.

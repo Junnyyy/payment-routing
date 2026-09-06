@@ -61,6 +61,7 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
     };
     match family {
         "single-positive"
+        | "single-positive-first"
         | "single-zero"
         | "single-deadline"
         | "single-disconnected"
@@ -71,8 +72,11 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
                 .iter()
                 .map(|i| i.id.clone())
                 .collect();
-            let fee = u64::from(family == "single-positive" || family == "batch-density");
+            let fee = u64::from(family.starts_with("single-positive") || family == "batch-density");
             case.network.rails.push(rail(0, members, fee, 1));
+            if family == "single-positive-first" {
+                case.network.rails[0].participants.rotate_right(1);
+            }
             let mut p = payment(0, case.network.institutions.len() - 1);
             if family == "single-deadline" {
                 p.max_delivery_minutes = Some(2);

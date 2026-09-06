@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "description": "Explain participant-order effect; bracket remaining exponential frontiers; certify feasible censored windows; correct history harness argument bound",
+  "cases": [
+    {
+      "family": "single-positive",
+      "scale": 64
+    },
+    {
+      "family": "single-positive",
+      "scale": 96
+    },
+    {
+      "family": "single-positive",
+      "scale": 128
+    },
+    {
+      "family": "single-positive-first",
+      "scale": 64
+    },
+    {
+      "family": "single-positive-first",
+      "scale": 96
+    },
+    {
+      "family": "single-positive-first",
+      "scale": 128
+    },
+    {
+      "family": "batch-scarce",
+      "scale": 29
+    },
+    {
+      "family": "batch-infeasible",
+      "scale": 30
+    },
+    {
+      "family": "batch-choices",
+      "scale": 9
+    },
+    {
+      "family": "batch-choices",
+      "scale": 10
+    },
+    {
+      "family": "batch-choices",
+      "scale": 11
+    },
+    {
+      "family": "schedule-reverse-deadline",
+      "scale": 14
+    },
+    {
+      "family": "schedule-reverse-deadline",
+      "scale": 15
+    },
+    {
+      "family": "sim-history",
+      "scale": 100000,
+      "ticks": 10000
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 4,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 4,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 4,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 5,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 5,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 5,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 6,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 6,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 6,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 8,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 8,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 8,
+      "seed": 99
+    }
+  ]
+}

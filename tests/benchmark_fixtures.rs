@@ -28,8 +28,22 @@ fn constructed_cases_match_independent_oracles_including_full_tie_rank() {
         let plan = optimize_batch(&c.network, &c.payments).unwrap();
         let oracle = batch_oracle::exhaustive(&c.network, &c.payments);
         assert_eq!(
-            plan.as_ref().map(|p| p.total_fee_cents),
-            oracle.as_ref().map(|p| p.fee),
+            plan.as_ref().map(|p| batch_oracle::Answer {
+                fee: p.total_fee_cents,
+                minutes: p.total_settlement_minutes,
+                hops: p.assignments.iter().map(|a| a.route.hops.len()).sum(),
+                paths: p
+                    .assignments
+                    .iter()
+                    .map(|a| a
+                        .route
+                        .hops
+                        .iter()
+                        .map(|h| (h.rail_id.clone(), h.sender.clone(), h.receiver.clone()))
+                        .collect())
+                    .collect(),
+            }),
+            oracle,
             "{family}"
         );
         if let Some(p) = &plan {
@@ -136,4 +150,26 @@ fn future_closed_hop_is_a_quality_failure_even_with_zero_queue() {
     assert!(trap.metrics().expired > 0);
     assert_eq!(control.metrics().completed, control.metrics().generated);
     assert_eq!(control.metrics().sla_failures, 0);
+}
+
+#[test]
+fn positive_fee_participant_order_changes_no_answer() {
+    for n in [4, 8, 16] {
+        let a = fixtures::static_case("single-positive", n);
+        let b = fixtures::static_case("single-positive-first", n);
+        assert_eq!(
+            route_payment(&a.network, &a.payments[0]).unwrap(),
+            route_payment(&b.network, &b.payments[0]).unwrap()
+        );
+    }
+}
+
+#[test]
+fn window_certificates_are_audited_and_have_oracle_minimum_fee() {
+    for seed in [0, 42, 99] {
+        let (c, _) = fixtures::capture_window_capacity(1, seed, 2);
+        let certificate = audit::window_reference(&c.network, &c.timed, &c.slots).unwrap();
+        let oracle = schedule_oracle::exhaustive(&c.network, &c.timed, &c.slots).unwrap();
+        assert_eq!(certificate.total_fee_cents, oracle.fee);
+    }
 }

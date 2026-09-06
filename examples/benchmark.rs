@@ -91,7 +91,14 @@ fn main() {
     let family = &a[0];
     let scale: usize = a[1].parse().unwrap();
     let seed: u64 = a[2].parse().unwrap();
-    assert!((2..=10000).contains(&scale));
+    assert!(
+        (2..=if family == "sim-history" {
+            100000
+        } else {
+            10000
+        })
+            .contains(&scale)
+    );
     let ticks: u64 = a
         .get(3)
         .filter(|s| s.as_str() != "--dump")
@@ -186,6 +193,17 @@ fn main() {
             "constructed fixture v1".into(),
         )
     };
+    if family.starts_with("window-") {
+        let certificate = audit::window_reference(&case.network, &case.timed, &case.slots);
+        meta.number("reference_feasible", certificate.is_some());
+        if let Some(c) = certificate {
+            meta.number("reference_fee_cents", c.total_fee_cents);
+            meta.number("reference_elapsed_upper_bound", c.total_elapsed_minutes);
+            if dump {
+                meta.string("reference_witness", format!("{c:?}"));
+            }
+        }
+    }
     let input = format!("{case:?}");
     meta.string("provenance", provenance);
     meta.string("input_digest", digest(&input));
