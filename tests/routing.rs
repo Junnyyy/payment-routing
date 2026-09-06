@@ -27,6 +27,8 @@ fn rail(id: &str, members: &[&str], fee: u64, minutes: u32) -> Rail {
         participants: members.iter().map(|id| (*id).into()).collect(),
         fee_cents: fee,
         settlement_minutes: minutes,
+        available: true,
+        max_amount_cents: None,
     }
 }
 
@@ -36,6 +38,7 @@ fn payment(sender: &str, receiver: &str) -> Payment {
         sender: sender.into(),
         receiver: receiver.into(),
         amount_cents: 100,
+        max_delivery_minutes: None,
     }
 }
 
@@ -166,4 +169,126 @@ fn routing_preserves_the_stage_zero_fixture_and_awaiting_instructions() {
     }
     assert_eq!(net, before);
     assert_eq!(net.statistics(), before.statistics());
+}
+
+#[test]
+fn unavailable_cheapest_rail_cannot_be_used_or_waited_for() {
+    let mut net = network(
+        &["A", "B", "D"],
+        vec![
+            rail("ab", &["A", "B"], 0, 0),
+            rail("closed", &["B", "D"], 0, 0),
+            rail("open", &["A", "D"], 7, 5),
+        ],
+    );
+    net.rails[1].available = false;
+    let p = payment("A", "D");
+    assert_route(
+        &route_payment(&net, &p).unwrap().unwrap(),
+        &[("open", "A", "D")],
+        7,
+        5,
+    );
+    net.rails[2].available = false;
+    assert_eq!(net.validate(), Ok(()));
+    assert_eq!(route_payment(&net, &p), Ok(None));
+}
+
+#[test]
+fn inclusive_amount_ceiling_is_checked_on_every_hop() {
+    let mut net = network(
+        &["A", "B", "D"],
+        vec![
+            rail("ab", &["A", "B"], 1, 0),
+            rail("bd", &["B", "D"], 1, 0),
+            rail("direct", &["A", "D"], 9, 0),
+        ],
+    );
+    net.rails[1].max_amount_cents = Some(100);
+    let mut p = payment("A", "D");
+    for amount in [99, 100] {
+        p.amount_cents = amount;
+        assert_route(
+            &route_payment(&net, &p).unwrap().unwrap(),
+            &[("ab", "A", "B"), ("bd", "B", "D")],
+            2,
+            0,
+        );
+    }
+    p.amount_cents = 101;
+    assert_route(
+        &route_payment(&net, &p).unwrap().unwrap(),
+        &[("direct", "A", "D")],
+        9,
+        0,
+    );
+    net.rails[2].max_amount_cents = Some(100);
+    assert_eq!(route_payment(&net, &p), Ok(None));
+    net.rails[1].max_amount_cents = Some(u64::MAX);
+    p.amount_cents = u64::MAX;
+    assert!(route_payment(&net, &p).unwrap().is_some());
+}
+
+#[test]
+fn a_more_expensive_faster_prefix_is_needed_to_meet_delivery() {
+    // A-B cheap: (fee=1,time=9), fast: (5,3). B-D: (1,2).
+    // With a 10-minute deadline, fee 2 takes 11 and fails; fee 6 takes 5
+    // and wins over the direct fee 9. Keeping only B's cheapest prefix fails.
+    let net = network(
+        &["A", "B", "D"],
+        vec![
+            rail("cheap", &["A", "B"], 1, 9),
+            rail("fast", &["A", "B"], 5, 3),
+            rail("bd", &["B", "D"], 1, 2),
+            rail("direct", &["A", "D"], 9, 1),
+        ],
+    );
+    let mut p = payment("A", "D");
+    p.max_delivery_minutes = Some(10);
+    assert_route(
+        &route_payment(&net, &p).unwrap().unwrap(),
+        &[("fast", "A", "B"), ("bd", "B", "D")],
+        6,
+        5,
+    );
+    p.max_delivery_minutes = Some(11);
+    assert_route(
+        &route_payment(&net, &p).unwrap().unwrap(),
+        &[("cheap", "A", "B"), ("bd", "B", "D")],
+        2,
+        11,
+    );
+    p.max_delivery_minutes = None;
+    assert_eq!(route_payment(&net, &p).unwrap().unwrap().total_fee_cents, 2);
+    p.max_delivery_minutes = Some(0);
+    assert_eq!(route_payment(&net, &p), Ok(None));
+}
+
+#[test]
+fn zero_deadline_accepts_only_zero_total_latency() {
+    let mut net = network(
+        &["A", "B", "D"],
+        vec![rail("ab", &["A", "B"], 0, 0), rail("bd", &["B", "D"], 0, 0)],
+    );
+    let mut p = payment("A", "D");
+    p.max_delivery_minutes = Some(0);
+    assert_route(
+        &route_payment(&net, &p).unwrap().unwrap(),
+        &[("ab", "A", "B"), ("bd", "B", "D")],
+        0,
+        0,
+    );
+    net.rails[1].settlement_minutes = 1;
+    assert_eq!(route_payment(&net, &p), Ok(None));
+}
+
+#[test]
+fn zero_transaction_ceiling_is_invalid_even_on_an_unavailable_rail() {
+    let mut net = network(&["A", "D"], vec![rail("ad", &["A", "D"], 1, 0)]);
+    net.rails[0].max_amount_cents = Some(0);
+    for available in [true, false] {
+        net.rails[0].available = available;
+        assert!(net.validate().is_err());
+        assert!(route_payment(&net, &payment("A", "D")).is_err());
+    }
 }

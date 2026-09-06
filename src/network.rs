@@ -18,6 +18,11 @@ pub struct Rail {
     pub participants: Vec<String>,
     pub fee_cents: u64,
     pub settlement_minutes: u32,
+    /// Static availability for this snapshot; no schedules or waiting are modeled.
+    pub available: bool,
+    /// Inclusive ceiling on the USD principal of each hop, excluding fees.
+    /// None means no ceiling; a represented ceiling must be positive.
+    pub max_amount_cents: Option<u64>,
 }
 
 /// An instruction awaiting routing. Loading or viewing it never moves funds.
@@ -27,6 +32,8 @@ pub struct Payment {
     pub sender: String,
     pub receiver: String,
     pub amount_cents: u64,
+    /// Inclusive end-to-end latency budget; None means no delivery deadline.
+    pub max_delivery_minutes: Option<u64>,
 }
 
 impl Payment {
@@ -108,6 +115,12 @@ impl Network {
             if rail.name.trim().is_empty() || rail.participants.len() < 2 {
                 return Err(ValidationError(format!(
                     "rail {} needs a name and at least two participants",
+                    rail.id
+                )));
+            }
+            if rail.max_amount_cents == Some(0) {
+                return Err(ValidationError(format!(
+                    "rail {} transaction ceiling must be positive",
                     rail.id
                 )));
             }

@@ -37,6 +37,9 @@ impl Route {
 /// A shared rail connects every distinct pair of participants in both directions.
 /// Each hop carries the full USD principal and adds one fixed fee and latency.
 /// Opening balances are descriptive input, not a modeled funding constraint.
+/// Unavailable rails and rails below the principal's transaction amount are
+/// excluded. Total latency must not exceed the payment's optional deadline.
+/// Availability is fixed for the entire route; waiting and FX are not modeled.
 ///
 /// The search enumerates simple institution paths. Removing a cycle never raises
 /// nonnegative fees or latency, and wins the hop-count tie, so an optimum is simple.
@@ -52,7 +55,7 @@ pub fn route_payment(
     visit(
         network,
         &payment.sender,
-        &payment.receiver,
+        payment,
         &mut vec![payment.sender.as_str()],
         &mut Route {
             hops: vec![],
@@ -67,27 +70,40 @@ pub fn route_payment(
 fn visit<'a>(
     network: &'a Network,
     current: &'a str,
-    receiver: &str,
+    payment: &Payment,
     visited: &mut Vec<&'a str>,
     path: &mut Route,
     best: &mut Option<Route>,
 ) {
-    // Strict cost pruning preserves equal-cost candidates that can win a tie.
-    if best
-        .as_ref()
-        .is_some_and(|route| path.total_fee_cents > route.total_fee_cents)
+    if let Some(deadline) = payment.max_delivery_minutes
+        && path.total_settlement_minutes > u128::from(deadline)
     {
         return;
     }
-    if current == receiver {
-        if best.as_ref().is_none_or(|route| path.rank() < route.rank()) {
+    // Strict cost pruning preserves equal-cost candidates that can win a tie.
+    if let Some(route) = best.as_ref()
+        && path.total_fee_cents > route.total_fee_cents
+    {
+        return;
+    }
+    if current == payment.receiver {
+        let improves = match best {
+            Some(route) => path.rank() < route.rank(),
+            None => true,
+        };
+        if improves {
             *best = Some(path.clone());
         }
         return;
     }
 
     for rail in &network.rails {
-        if !rail.participants.iter().any(|id| id == current) {
+        if !rail.available || !rail.participants.iter().any(|id| id == current) {
+            continue;
+        }
+        if let Some(limit) = rail.max_amount_cents
+            && payment.amount_cents > limit
+        {
             continue;
         }
         for next in &rail.participants {
@@ -104,7 +120,7 @@ fn visit<'a>(
             // minutes for any addressable simple path on supported Rust targets.
             path.total_fee_cents += u128::from(rail.fee_cents);
             path.total_settlement_minutes += u128::from(rail.settlement_minutes);
-            visit(network, next, receiver, visited, path, best);
+            visit(network, next, payment, visited, path, best);
             path.total_settlement_minutes -= u128::from(rail.settlement_minutes);
             path.total_fee_cents -= u128::from(rail.fee_cents);
             path.hops.pop();
