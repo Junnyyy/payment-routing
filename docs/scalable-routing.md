@@ -158,3 +158,20 @@ only unused repair trials on one single-route repricing sweep. It changes 118 to
 113 cents without raising the configured repair budget. Seeds 65 and 123 involve
 coordinated allocations rather than this stale local choice. Retain them and add
 32 new schedule seeds plus 16 new online seeds for final reporting.
+
+## Final stopping point (functional source 6d6a28f)
+
+The [final report](scalable-routing-report.md) records 620 configurations / 2,480
+fresh observations. The median target is achieved: all 199 certified-feasible
+schedules have full plans, median fee gap 0%, with four remaining gaps up to
+70.73%; all 64 exact online cohorts have 0% gap. The worst held-out case requires
+four coordinated assignments and is outside the monotonically improving
+single/pair neighborhood. All deadline and resource audits pass. The sparse
+32-institution mesh remains the runtime bottleneck at approximately 8 ms p95,
+while the 512-institution zero-fee case sustains roughly 19,000 ticks/second.
+
+An untimed comparison of the supported example shows 440 fewer completions under
+Reserved (12,409 versus 12,849), despite lower actual fees and no late completions.
+The same generated cohort has a different served subset, so no gap is assigned.
+Retain this evidence of irrevocable reservation/arrival tradeoffs. Do not infer
+universal throughput or objective dominance from the measured median target.

@@ -9,7 +9,7 @@ cargo run --locked --example simulate -- 10000 42 reserved
 cargo run --locked --example simulate -- 10000 42 static
 ```
 
-Both generate the identical 19,520 arrival attempts admitted by the seeded process,
+Both generate the identical 19,520 payment instructions from the seeded process,
 pass every-event paced/manual and restart replay checks, and leave six active
 payments at the observation boundary. Reserved completes 12,409 and expires
 7,105, versus 12,849 completed and 6,665 expired under CheapestStatic. Both have

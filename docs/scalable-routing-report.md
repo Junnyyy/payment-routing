@@ -137,6 +137,18 @@ policy completes 99,989–99,990 payments in 324–327 ms, with 19,779–19,995 
 SLA failures and a mean queue of 53.75–53.79. Those failures reflect offered work
 above the configured service/admission capacity, never illegal departures.
 
+The [untimed six-institution example comparison](../benchmarks/results/demo-comparison/README.md)
+also exposes an online completion tradeoff. From the same 19,520 generated
+payments, `Reserved` completes **12,409**, expires 7,105 and leaves six active;
+`CheapestStatic` completes **12,849**, expires 6,665 and leaves six active. Both
+have zero late completions. Reserved actual fees are 3,242,640 cents versus
+4,694,565 cents, completed elapsed time is 58,388 versus 43,238 minutes, and peak
+active count is 18 versus 15. Those lower fees do not establish a better complete
+workload or a finite gap. Reserving cheaper future departures can make capacity
+unavailable to later arrivals; the policy does not universally improve online
+completion throughput. These example outputs pass replay checks but have no exact
+global oracle and are not included in the 620 timed configurations.
+
 ## Investigation and failed approaches
 
 The complete iteration log is in [the strategy contract](scalable-routing.md).
