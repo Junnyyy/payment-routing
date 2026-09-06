@@ -44,6 +44,7 @@ pub fn demo_network() -> Network {
             settlement_minutes,
             available: true,
             max_amount_cents: None,
+            batch_capacity_cents: None,
         },
     )
     .collect();

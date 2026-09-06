@@ -37,6 +37,7 @@ impl Route {
 /// A shared rail connects every distinct pair of participants in both directions.
 /// Each hop carries the full USD principal and adds one fixed fee and latency.
 /// Opening balances are descriptive input, not a modeled funding constraint.
+/// Batch capacity is deliberately ignored here; it is enforced by batch routing.
 /// Unavailable rails and rails below the principal's transaction amount are
 /// excluded. Total latency must not exceed the payment's optional deadline.
 /// Availability is fixed for the entire route; waiting and FX are not modeled.

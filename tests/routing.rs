@@ -29,6 +29,7 @@ fn rail(id: &str, members: &[&str], fee: u64, minutes: u32) -> Rail {
         settlement_minutes: minutes,
         available: true,
         max_amount_cents: None,
+        batch_capacity_cents: None,
     }
 }
 
@@ -169,6 +170,19 @@ fn routing_preserves_the_stage_zero_fixture_and_awaiting_instructions() {
     }
     assert_eq!(net, before);
     assert_eq!(net.statistics(), before.statistics());
+}
+
+#[test]
+fn batch_capacity_does_not_change_single_payment_routing() {
+    let mut net = network(&["A", "B"], vec![rail("shared", &["A", "B"], 1, 0)]);
+    let p = payment("A", "B");
+    let expected = route_payment(&net, &p).unwrap();
+    assert!(expected.is_some());
+    for capacity in [Some(0), Some(1), Some(100), None] {
+        net.rails[0].batch_capacity_cents = capacity;
+        assert_eq!(net.validate(), Ok(()));
+        assert_eq!(route_payment(&net, &p).unwrap(), expected);
+    }
 }
 
 #[test]
