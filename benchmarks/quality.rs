@@ -31,7 +31,7 @@ pub fn case(family: &str, scale: usize, seed: u64) -> StaticCase {
         c.slots = c.network.rails.iter().map(|r| slot(r, 0, None)).collect();
         return c;
     }
-    assert_eq!(family, "schedule-random");
+    assert!(["schedule-random", "schedule-mixed"].contains(&family));
     let mut state = seed;
     let mut draw = || {
         state = state.wrapping_add(0x9e3779b97f4a7c15);
@@ -81,5 +81,51 @@ pub fn case(family: &str, scale: usize, seed: u64) -> StaticCase {
         });
         c.payments.push(p);
     }
+    if family == "schedule-mixed" {
+        let fallback = rail(
+            99,
+            c.network
+                .institutions
+                .iter()
+                .map(|n| n.id.clone())
+                .collect(),
+            100,
+            0,
+        );
+        for time in 0..=4 {
+            c.slots.push(slot(&fallback, time, None));
+        }
+        c.network.rails.push(fallback);
+    }
+    c
+}
+
+pub fn online(seed: u64) -> payment_routing::simulation::Scenario {
+    let mut c = simulation_case("sim-load", 3);
+    let members = vec!["N000".into(), "N001".into()];
+    c.network.rails = vec![
+        rail(0, members.clone(), 1, 0),
+        rail(1, members.clone(), 3, 0),
+        rail(2, members, 100, 0),
+    ];
+    c.network.rails[0].max_amount_cents = Some(1 + seed % 3);
+    c.network.rails[1].max_amount_cents = Some(2 + (seed / 3) % 2);
+    c.services = c
+        .network
+        .rails
+        .iter()
+        .enumerate()
+        .map(|(i, r)| payment_routing::simulation::RailService {
+            rail_id: r.id.clone(),
+            period_minutes: 1,
+            offset_minutes: 0,
+            open_minutes: 1,
+            capacity_per_minute_cents: if i == 2 { None } else { Some(2 + seed % 4) },
+        })
+        .collect();
+    c.arrivals.min_amount_cents = 1;
+    c.arrivals.max_amount_cents = 3;
+    c.arrivals.min_sla_minutes = 0;
+    c.arrivals.max_sla_minutes = 0;
     c
 }

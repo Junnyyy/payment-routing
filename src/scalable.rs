@@ -51,11 +51,13 @@ pub struct SearchDiagnostics {
 }
 impl SearchDiagnostics {
     pub(crate) fn plus(&mut self, other: Self) {
-        self.searches += other.searches;
-        self.expansions += other.expansions;
-        self.candidates += other.candidates;
-        self.truncated_searches += other.truncated_searches;
-        self.unresolved += other.unresolved;
+        self.searches = self.searches.saturating_add(other.searches);
+        self.expansions = self.expansions.saturating_add(other.expansions);
+        self.candidates = self.candidates.saturating_add(other.candidates);
+        self.truncated_searches = self
+            .truncated_searches
+            .saturating_add(other.truncated_searches);
+        self.unresolved = self.unresolved.saturating_add(other.unresolved);
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -299,8 +301,11 @@ impl Router {
                 continue;
             }
             if best.as_ref().is_some_and(|b| {
-                (label.journey.fee, label.ready, label.journey.steps.len())
-                    > (b.fee, b.steps.last().unwrap().arrival, b.steps.len())
+                (
+                    label.journey.fee,
+                    label.ready,
+                    label.journey.steps.len() + 1,
+                ) > (b.fee, b.steps.last().unwrap().arrival, b.steps.len())
             }) {
                 continue;
             }

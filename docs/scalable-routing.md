@@ -63,3 +63,24 @@ allocation orders, keeping the best complete result. This directly targets both
 unserved urgent payments and over-allocation to large low-benefit payments.
 Retain the baseline failures. Subsequently target the avoidable exploration of
 prefixes already unable to improve a direct incumbent in dense zero-fee graphs.
+
+## Round 2: allocation orders (source 8216a82)
+
+[Every gap](../benchmarks/results/strategy-orders/gaps.json). All 35 certified
+feasible cases now have full plans and zero fee gap. All 33 exact-infeasible mixed
+cases remain unresolved, with no false feasibility claim. A four-order upper
+bound adds cost: 128-slot contention takes 1.79 ms instead of 0.96 ms; a closed
+256-record backlog takes 136 ms/1,000 ticks instead of 58 ms. Queue/completion/fee
+outcomes for the original online families are unchanged between these rounds.
+
+Dense online search remains the worst runtime class: 128 institutions takes
+1,111 ms/1,000 ticks, and 256 is censored. The next change uses `prefix hops + 1`
+as a lower bound for an unfinished path. This safely prunes equal-fee/equal-time
+prefixes which cannot match an incumbent's hop count. It changes no constraints.
+Expand validation to 3,940 independent small batch witnesses plus 7,880 single
+payment oracle comparisons, 64 guaranteed-feasible mixed-cost cases and 16 small
+online cohorts compared with the exact schedule for those identical arrivals.
+The online cohort has zero SLA and an unlimited expensive fallback, so every
+payment completes within its release tick; no carry-in or unfinished work is
+omitted from that comparison. These are narrow online quality cases, not claims
+of clairvoyant performance with future arrivals.

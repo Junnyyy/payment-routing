@@ -1,6 +1,8 @@
 //! One fresh-process benchmark worker; use scripts/benchmark.py for supervision.
 #[path = "../benchmarks/audit.rs"]
 mod audit;
+#[path = "../tests/support/simulation_audit.rs"]
+mod event_audit;
 #[path = "../benchmarks/fixtures.rs"]
 mod fixtures;
 #[path = "../benchmarks/quality.rs"]
@@ -116,7 +118,11 @@ fn main() {
     meta.number("scale", scale);
     meta.number("seed", seed);
     if family.starts_with("sim-") {
-        let mut config = fixtures::simulation_case(family, scale);
+        let mut config = if family == "sim-quality" {
+            quality::online(seed)
+        } else {
+            fixtures::simulation_case(family, scale)
+        };
         if heuristic {
             config.strategy = RoutingStrategy::Reserved {
                 limits: Default::default(),
@@ -132,7 +138,9 @@ fn main() {
             meta.string("fixture", &input);
         }
         meta.print();
-        let mut sim = Simulator::new(config, seed).unwrap();
+        let mut sim = Simulator::new(config.clone(), seed).unwrap();
+        let mut cohort_events = vec![];
+        let mut independent = event_audit::Audit::default();
         let mut active = vec![];
         let mut queued = vec![];
         let mut waits = vec![];
@@ -141,8 +149,12 @@ fn main() {
         let start = Instant::now();
         for _ in 0..ticks {
             let tick_start = Instant::now();
-            sim.step().unwrap();
+            let report = sim.step().unwrap();
             tick_ns.push(tick_start.elapsed().as_nanos());
+            if family == "sim-quality" {
+                independent.check(&config, &report, &sim);
+                cohort_events.extend(report.events);
+            }
             let work = sim.active_payments();
             active.push(work.len());
             queued.push(work.iter().filter(|p| p.in_flight_until.is_none()).count());
@@ -174,6 +186,56 @@ fn main() {
         );
         out.number("routing_unresolved", sim.routing_diagnostics().unresolved);
         out.number("reservation_entries_end", sim.reservation_entries());
+        if family == "sim-quality" {
+            use payment_routing::scheduling::*;
+            assert_eq!(m.completed, m.generated);
+            assert_eq!(m.sla_failures, 0);
+            let payments: Vec<_> = cohort_events
+                .iter()
+                .filter_map(|e| match &e.kind {
+                    EventKind::Generated {
+                        payment, deadline, ..
+                    } => Some(TimedPayment {
+                        payment: payment.clone(),
+                        earliest_execution_minute: e.minute as u64,
+                        deadline_minute: Some(*deadline as u64),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            let slots: Vec<_> = (0..ticks)
+                .flat_map(|time| config.network.rails.iter().map(move |rail| (time, rail)))
+                .map(|(time, r)| RailDeparture {
+                    rail_id: r.id.clone(),
+                    departure_minute: time,
+                    fee_cents: None,
+                    settlement_minutes: None,
+                    capacity_cents: config
+                        .services
+                        .iter()
+                        .find(|s| s.rail_id == r.id)
+                        .unwrap()
+                        .capacity_per_minute_cents,
+                })
+                .collect();
+            let oracle_start = Instant::now();
+            let optimum = optimize_schedule(&config.network, &payments, &slots)
+                .unwrap()
+                .unwrap();
+            out.number("oracle_ns", oracle_start.elapsed().as_nanos());
+            audit::schedule(&config.network, &payments, &slots, &optimum);
+            out.number("known_optimum_fee", optimum.total_fee_cents);
+            out.number(
+                "optimality_gap_percent",
+                if optimum.total_fee_cents == 0 {
+                    0.0
+                } else {
+                    100.0 * (m.routing_cost_cents - optimum.total_fee_cents) as f64
+                        / optimum.total_fee_cents as f64
+                },
+            );
+            out.string("oracle_scope","identical complete generated cohort; zero SLA; no carry-in or background; exact full schedule");
+        }
         out.number("generated", m.generated);
         out.number("completed", m.completed);
         out.number("completed_on_time", m.completed - m.completed_late);
@@ -218,6 +280,7 @@ fn main() {
                 "schedule-dense",
                 "schedule-knapsack",
                 "schedule-random",
+                "schedule-mixed",
             ]
             .contains(&family)
             {

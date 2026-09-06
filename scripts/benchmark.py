@@ -81,7 +81,7 @@ def supervise(command, timeout, rss_mib):
 def deterministic_result(row):
     # All other result fields, including queue observations and counters, must replay.
     return {k: v for k, v in row["result"].items()
-            if k not in ("solve_ns", "instrumented", "tick_ns_p95", "tick_ns_max")}
+            if k not in ("solve_ns", "instrumented", "tick_ns_p95", "tick_ns_max", "oracle_ns")}
 
 
 def verify_rows(rows):
@@ -167,7 +167,7 @@ def main():
         if not args.skip_build:
             subprocess.run(command, cwd=ROOT, check=True)
         binaries[mode] = target / "release" / "examples" / "benchmark"
-    files = sorted(p for glob in ("src/**/*.rs", "benchmarks/**/*.rs", "scripts/*.py", "examples/benchmark.rs", "Cargo.*") for p in ROOT.glob(glob))
+    files = sorted(p for glob in ("src/**/*.rs", "tests/**/*.rs", "benchmarks/**/*.rs", "scripts/*.py", "examples/benchmark.rs", "Cargo.*") for p in ROOT.glob(glob))
     source_hash = hashlib.sha256(b"".join(str(p.relative_to(ROOT)).encode() + b"\0" + p.read_bytes() for p in files)).hexdigest()
     metadata = {"schema": 1, "command": sys.argv, "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "platform": platform.platform(), "machine": platform.machine(), "cpu_count": os.cpu_count(),
