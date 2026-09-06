@@ -292,3 +292,72 @@ fn zero_transaction_ceiling_is_invalid_even_on_an_unavailable_rail() {
         assert!(route_payment(&net, &payment("A", "D")).is_err());
     }
 }
+
+#[test]
+fn fees_and_latency_sum_exactly_beyond_their_input_integer_widths() {
+    let mut net = network(
+        &["A", "B", "D"],
+        vec![
+            rail("ab", &["A", "B"], u64::MAX, u32::MAX),
+            rail("bd", &["B", "D"], u64::MAX, u32::MAX),
+        ],
+    );
+    let mut p = payment("A", "D");
+    let minutes = 2 * u64::from(u32::MAX);
+    p.max_delivery_minutes = Some(minutes);
+    assert_route(
+        &route_payment(&net, &p).unwrap().unwrap(),
+        &[("ab", "A", "B"), ("bd", "B", "D")],
+        2 * u128::from(u64::MAX),
+        u128::from(minutes),
+    );
+    p.max_delivery_minutes = Some(minutes - 1);
+    assert_eq!(route_payment(&net, &p), Ok(None));
+    p.max_delivery_minutes = None;
+    // A wrapping or saturating fee sum could wrongly prefer the faster detour.
+    net.rails[0].settlement_minutes = 0;
+    net.rails[1].settlement_minutes = 0;
+    net.rails.push(rail("direct", &["A", "D"], u64::MAX, 1));
+    assert_route(
+        &route_payment(&net, &p).unwrap().unwrap(),
+        &[("direct", "A", "D")],
+        u128::from(u64::MAX),
+        1,
+    );
+}
+
+#[test]
+fn zero_cost_cycles_terminate_and_equal_prefixes_can_improve_a_tie() {
+    let mut net = network(
+        &["A", "B", "C", "D"],
+        vec![
+            rail("ac", &["A", "C"], 0, 0),
+            rail("bc", &["B", "C"], 0, 0),
+            rail("ab", &["A", "B"], 0, 0),
+            rail("bd", &["B", "D"], 0, 0),
+        ],
+    );
+    // Search order encounters A-C-B-D before the better A-B-D at equal fee/time.
+    let expected = route_payment(&net, &payment("A", "D")).unwrap().unwrap();
+    assert_route(&expected, &[("ab", "A", "B"), ("bd", "B", "D")], 0, 0);
+    net.rails.reverse();
+    assert_eq!(route_payment(&net, &payment("A", "D")), Ok(Some(expected)));
+}
+
+#[test]
+fn lexical_tie_break_includes_intermediate_institution_ids() {
+    let mut net = network(
+        &["A", "B", "C", "D"],
+        vec![
+            rail("entry", &["A", "C", "B"], 1, 1),
+            rail("exit", &["D", "C", "B"], 1, 1),
+        ],
+    );
+    let expected = route_payment(&net, &payment("A", "D")).unwrap().unwrap();
+    assert_route(&expected, &[("entry", "A", "B"), ("exit", "B", "D")], 2, 2);
+    net.rails.reverse();
+    for rail in &mut net.rails {
+        rail.participants.reverse();
+    }
+    assert_eq!(route_payment(&net, &payment("A", "D")), Ok(Some(expected)));
+}

@@ -45,6 +45,22 @@ impl Route {
 /// nonnegative fees or latency, and wins the hop-count tie, so an optimum is simple.
 /// This is exact but exponential in the worst case: intended for small synthetic
 /// networks, without a heuristic cutoff or external solver.
+///
+/// ```
+/// use payment_routing::{demo::demo_network, routing::route_payment};
+///
+/// let network = demo_network();
+/// let mut payment = network.payments[0].clone();
+/// let cheapest = route_payment(&network, &payment)?.unwrap();
+/// assert_eq!(cheapest.total_fee_cents, 5);
+/// assert_eq!(cheapest.hops[0].rail_id, "ACH");
+///
+/// payment.max_delivery_minutes = Some(0);
+/// let immediate = route_payment(&network, &payment)?.unwrap();
+/// assert_eq!(immediate.total_fee_cents, 25);
+/// assert_eq!(immediate.total_settlement_minutes, 0);
+/// # Ok::<(), payment_routing::network::ValidationError>(())
+/// ```
 pub fn route_payment(
     network: &Network,
     payment: &Payment,
