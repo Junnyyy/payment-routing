@@ -36,6 +36,8 @@ def supervise(command, timeout, rss_mib):
                     # ps reports KiB on both supported platforms. Sampling can overshoot.
                     sample = subprocess.run(["ps", "-o", "rss=", "-p", str(child.pid)],
                                             capture_output=True, text=True, check=False)
+                    if sample.returncode != 0 and sample.stderr.strip():
+                        raise RuntimeError("RSS guard unavailable: " + sample.stderr.strip())
                     if sample.stdout.strip() and int(sample.stdout.strip()) > rss_mib * 1024:
                         reason = "rss_limit"
                     last_sample = now
@@ -101,8 +103,11 @@ def summary(rows):
     out.update({"repeats": len(timing), "finished": len(solved),
                 "timeouts": sum(r["status"] == "timeout" for r in timing),
                 "rss_limits": sum(r["status"] == "rss_limit" for r in timing),
+                "errors": sum(r["status"] == "error" for r in timing),
                 "status": solved[0]["status"] if len(solved) == len(timing) else "censored",
                 "counter_status": next((r["status"] for r in rows if r["mode"] == "stats"), "missing")})
+    out.update({k: v for k, v in next((r["input"] for r in rows if r["input"]), {}).items()
+                if k not in ("kind", "family", "scale", "seed", "ticks")})
     if solved:
         values = [r["result"]["solve_ns"] / 1e6 for r in solved]
         out.update(solve_ms_median=statistics.median(values), solve_ms_min=min(values), solve_ms_max=max(values))
@@ -144,6 +149,8 @@ def main():
         parser.error("resource normalization supports macOS and Linux only")
     if args.repeats < 1 or args.timeout <= 0 or args.rss_mib < 32:
         parser.error("positive repeats/timeout and at least 32 MiB required")
+    # Fail before creating results if the host sandbox denies the RSS guard.
+    subprocess.run(["ps", "-o", "rss=", "-p", str(os.getpid())], check=True, capture_output=True)
     manifest = json.loads(args.manifest.read_text())
     args.output.mkdir(parents=True, exist_ok=False)
     binaries = {}
@@ -169,6 +176,7 @@ def main():
                 "rss_sampling_seconds": 0.1, "manifest": manifest}
     (args.output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     summaries = []
+    had_errors = False
     with (args.output / "raw.jsonl").open("w") as log:
         for case in manifest["cases"]:
             family, scale = case["family"], case["scale"]
@@ -183,7 +191,7 @@ def main():
                     log.flush()
                     rows.append(row)
                     if row["status"] == "error":
-                        raise RuntimeError(row)
+                        had_errors = True
             verify_rows(rows)
             record = summary(rows)
             summaries.append(record)
@@ -194,6 +202,8 @@ def main():
         writer.writeheader()
         writer.writerows(summaries)
     (args.output / "summary.json").write_text(json.dumps(summaries, indent=2) + "\n")
+    if had_errors:
+        raise SystemExit("Worker errors recorded; inspect raw.jsonl")
 
 
 if __name__ == "__main__":

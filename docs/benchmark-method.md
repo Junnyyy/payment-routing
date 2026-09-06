@@ -99,3 +99,27 @@ The batch projection sums those departure budgets per rail and drops waiting;
 the single projection also drops capacity. These are relaxations, not executions
 of the online policy. Fees can be compared as lower bounds only when the relaxed
 batch is feasible; no online optimality gap is inferred from these projections.
+
+## Investigation log
+
+1. **Pilot** (`suites/pilot.json`): 82 cases, one timing observation plus one counter
+   run each, 1-second/512-MiB guards. Equal-cost assignments and departure contention
+   were much more expensive than distinct-cost volume. Dense one-payment batch
+   enumeration reached 109,601 candidates and about 125 MiB at ten institutions.
+   All observations are retained; these exploratory single samples are not
+   repeat-based frontier claims.
+2. **Follow-up** (`suites/frontier.json`): narrow those time/memory boundaries with
+   three timing repeats; add parallel route choices at fixed payment count,
+   intermediate network densities, reversed deadline order, and equal-fee/different-
+   latency controls. The pilot's batch/demo versus schedule/demo gap motivates
+   isolating the different remaining-score bounds. Add multihop slot expansion to
+   test whether the cheap one-hop slot sweep generalizes. Reduce per-minute window
+   capacity from ten to two and use seeds 0, 42, 99 because the initial captured
+   windows had no contention. Pair pinned-route failure with a direct-only network,
+   and lengthen the SLA of a disconnected queue to expose active-state scan cost.
+
+For `window-contended-*`, capture uses two principal cents per minute; ordinary
+windows use ten. `sim-pinned-direct` removes the cheap multihop option from the
+same seeded workload; it is a fixture control, not a new optimizer policy. In
+`sim-backlog`, service is closed and SLA is 10,000 minutes, keeping work active
+through the measured 1,000 ticks instead of expiring it after eight minutes.

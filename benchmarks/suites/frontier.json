@@ -1,0 +1,528 @@
+{
+  "schema": 1,
+  "description": "Follow-up to pilot: narrow censored boundaries; test deadline order, weaker fee-only bound, future-window trap, actual window contention, and seed sensitivity",
+  "cases": [
+    {
+      "family": "single-positive",
+      "scale": 16
+    },
+    {
+      "family": "single-positive",
+      "scale": 32
+    },
+    {
+      "family": "single-positive",
+      "scale": 64
+    },
+    {
+      "family": "single-zero",
+      "scale": 10
+    },
+    {
+      "family": "single-zero",
+      "scale": 11
+    },
+    {
+      "family": "single-zero",
+      "scale": 12
+    },
+    {
+      "family": "single-zero",
+      "scale": 13
+    },
+    {
+      "family": "single-disconnected",
+      "scale": 10
+    },
+    {
+      "family": "single-disconnected",
+      "scale": 11
+    },
+    {
+      "family": "single-disconnected",
+      "scale": 12
+    },
+    {
+      "family": "single-deadline",
+      "scale": 12
+    },
+    {
+      "family": "single-deadline",
+      "scale": 32
+    },
+    {
+      "family": "single-density",
+      "scale": 2
+    },
+    {
+      "family": "single-density",
+      "scale": 4
+    },
+    {
+      "family": "single-density",
+      "scale": 6
+    },
+    {
+      "family": "single-density",
+      "scale": 8
+    },
+    {
+      "family": "batch-volume",
+      "scale": 128
+    },
+    {
+      "family": "batch-volume",
+      "scale": 512
+    },
+    {
+      "family": "batch-volume",
+      "scale": 2048
+    },
+    {
+      "family": "batch-ties",
+      "scale": 24
+    },
+    {
+      "family": "batch-ties",
+      "scale": 25
+    },
+    {
+      "family": "batch-ties",
+      "scale": 26
+    },
+    {
+      "family": "batch-ties",
+      "scale": 27
+    },
+    {
+      "family": "batch-scarce",
+      "scale": 24
+    },
+    {
+      "family": "batch-scarce",
+      "scale": 26
+    },
+    {
+      "family": "batch-scarce",
+      "scale": 28
+    },
+    {
+      "family": "batch-infeasible",
+      "scale": 24
+    },
+    {
+      "family": "batch-infeasible",
+      "scale": 27
+    },
+    {
+      "family": "batch-infeasible",
+      "scale": 29
+    },
+    {
+      "family": "batch-density",
+      "scale": 10
+    },
+    {
+      "family": "batch-density",
+      "scale": 11
+    },
+    {
+      "family": "batch-density",
+      "scale": 12
+    },
+    {
+      "family": "batch-choices",
+      "scale": 2
+    },
+    {
+      "family": "batch-choices",
+      "scale": 4
+    },
+    {
+      "family": "batch-choices",
+      "scale": 8
+    },
+    {
+      "family": "batch-choices",
+      "scale": 12
+    },
+    {
+      "family": "batch-latency-ties",
+      "scale": 8
+    },
+    {
+      "family": "batch-latency-ties",
+      "scale": 22
+    },
+    {
+      "family": "batch-latency-ties",
+      "scale": 26
+    },
+    {
+      "family": "schedule-ties",
+      "scale": 24
+    },
+    {
+      "family": "schedule-ties",
+      "scale": 26
+    },
+    {
+      "family": "schedule-ties",
+      "scale": 27
+    },
+    {
+      "family": "schedule-contention",
+      "scale": 9
+    },
+    {
+      "family": "schedule-contention",
+      "scale": 10
+    },
+    {
+      "family": "schedule-contention",
+      "scale": 11
+    },
+    {
+      "family": "schedule-deadline",
+      "scale": 10
+    },
+    {
+      "family": "schedule-deadline",
+      "scale": 12
+    },
+    {
+      "family": "schedule-reverse-deadline",
+      "scale": 7
+    },
+    {
+      "family": "schedule-reverse-deadline",
+      "scale": 10
+    },
+    {
+      "family": "schedule-reverse-deadline",
+      "scale": 12
+    },
+    {
+      "family": "schedule-latency-ties",
+      "scale": 8
+    },
+    {
+      "family": "schedule-latency-ties",
+      "scale": 22
+    },
+    {
+      "family": "schedule-latency-ties",
+      "scale": 128
+    },
+    {
+      "family": "schedule-multihop-slots",
+      "scale": 8
+    },
+    {
+      "family": "schedule-multihop-slots",
+      "scale": 32
+    },
+    {
+      "family": "schedule-multihop-slots",
+      "scale": 64
+    },
+    {
+      "family": "schedule-multihop-slots",
+      "scale": 128
+    },
+    {
+      "family": "sim-density",
+      "scale": 9,
+      "ticks": 100
+    },
+    {
+      "family": "sim-density",
+      "scale": 10,
+      "ticks": 100
+    },
+    {
+      "family": "sim-backlog",
+      "scale": 8
+    },
+    {
+      "family": "sim-backlog",
+      "scale": 64
+    },
+    {
+      "family": "sim-backlog",
+      "scale": 256
+    },
+    {
+      "family": "sim-backlog",
+      "scale": 1024
+    },
+    {
+      "family": "sim-pinned",
+      "scale": 2
+    },
+    {
+      "family": "sim-pinned",
+      "scale": 8
+    },
+    {
+      "family": "sim-pinned-direct",
+      "scale": 2
+    },
+    {
+      "family": "sim-pinned-direct",
+      "scale": 8
+    },
+    {
+      "family": "sim-history",
+      "scale": 2,
+      "ticks": 10000
+    },
+    {
+      "family": "sim-history",
+      "scale": 4096,
+      "ticks": 10000
+    },
+    {
+      "family": "sim-history",
+      "scale": 100000,
+      "ticks": 10000
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 2,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 2,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 2,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 4,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 4,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 4,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 8,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 8,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-static",
+      "scale": 8,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 2,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 2,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 2,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 4,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 4,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 4,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 8,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 8,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-batch",
+      "scale": 8,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 2,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 2,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 2,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 3,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 3,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 3,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 4,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 4,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 4,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 6,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 6,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 6,
+      "seed": 99
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 8,
+      "seed": 0
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 8,
+      "seed": 42
+    },
+    {
+      "family": "window-contended-schedule",
+      "scale": 8,
+      "seed": 99
+    },
+    {
+      "family": "sim-load",
+      "scale": 13,
+      "seed": 0,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 13,
+      "seed": 42,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 13,
+      "seed": 99,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 14,
+      "seed": 0,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 14,
+      "seed": 42,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 14,
+      "seed": 99,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 16,
+      "seed": 0,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 16,
+      "seed": 42,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 16,
+      "seed": 99,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 32,
+      "seed": 0,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 32,
+      "seed": 42,
+      "ticks": 3000
+    },
+    {
+      "family": "sim-load",
+      "scale": 32,
+      "seed": 99,
+      "ticks": 3000
+    }
+  ]
+}

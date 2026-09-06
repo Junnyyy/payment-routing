@@ -81,6 +81,43 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
             case.expected_fee = (!disconnected).then_some(u128::from(fee));
             case.expected_infeasible = disconnected;
         }
+        "single-density" => {
+            assert!(scale <= 8);
+            case.network = network(9);
+            for i in 0..9 {
+                for j in i + 1..9 {
+                    if j - i <= scale {
+                        case.network.rails.push(rail(
+                            case.network.rails.len(),
+                            vec![format!("N{i:03}"), format!("N{j:03}")],
+                            0,
+                            0,
+                        ));
+                    }
+                }
+            }
+            case.payments.push(payment(0, 8));
+            case.expected_fee = Some(0);
+        }
+        "batch-choices" => {
+            case.network.rails = (0..scale)
+                .map(|i| rail(i, vec!["N000".into(), "N001".into()], 1, 0))
+                .collect();
+            case.payments = (0..8).map(|i| payment(i, 1)).collect();
+            case.expected_fee = Some(8);
+        }
+        "schedule-multihop-slots" => {
+            case.network = network(4);
+            for i in 0..3 {
+                let r = rail(i, vec![format!("N{i:03}"), format!("N{:03}", i + 1)], 1, 0);
+                for t in 0..scale {
+                    case.slots.push(slot(&r, t as u64, None));
+                }
+                case.network.rails.push(r);
+            }
+            case.payments.push(payment(0, 3));
+            case.expected_fee = Some(3);
+        }
         "single-chain" => {
             case.network = network(scale);
             for i in 0..scale - 1 {
@@ -96,12 +133,15 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
         }
         "batch-volume"
         | "batch-ties"
+        | "batch-latency-ties"
         | "batch-scarce"
         | "batch-infeasible"
         | "batch-ceiling"
         | "schedule-ties"
+        | "schedule-latency-ties"
         | "schedule-contention"
         | "schedule-deadline"
+        | "schedule-reverse-deadline"
         | "schedule-slots" => {
             let members = vec!["N000".into(), "N001".into()];
             let tied = family.ends_with("ties");
@@ -111,6 +151,9 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
             ];
             case.payments = (0..scale).map(|i| payment(i, 1)).collect();
             case.expected_fee = Some(scale as u128);
+            if family.ends_with("latency-ties") {
+                case.network.rails[1].settlement_minutes = 1;
+            }
             if family == "batch-scarce" {
                 case.network.rails[0].batch_capacity_cents = Some((scale / 2) as u64);
                 case.expected_fee = Some((scale / 2 + 5 * (scale - scale / 2)) as u128);
@@ -130,6 +173,7 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
             }
             if family == "schedule-contention"
                 || family == "schedule-deadline"
+                || family == "schedule-reverse-deadline"
                 || family == "schedule-slots"
             {
                 case.network.rails.pop();
@@ -141,7 +185,7 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
                     case.slots
                         .push(slot(&case.network.rails[0], t as u64, Some(1)));
                 }
-            } else if family == "schedule-ties" {
+            } else if family == "schedule-ties" || family == "schedule-latency-ties" {
                 case.slots = case
                     .network
                     .rails
@@ -200,7 +244,9 @@ pub fn static_case(family: &str, scale: usize) -> StaticCase {
         .map(|(i, p)| TimedPayment {
             payment: p.clone(),
             earliest_execution_minute: 0,
-            deadline_minute: if family == "schedule-deadline" {
+            deadline_minute: if family == "schedule-reverse-deadline" {
+                Some((scale - 1 - i) as u64)
+            } else if family == "schedule-deadline" {
                 Some(i as u64)
             } else {
                 p.max_delivery_minutes
@@ -240,10 +286,13 @@ pub fn simulation_case(family: &str, scale: usize) -> Scenario {
             attempts = 8;
             period = scale as u64;
         }
-        "sim-disconnected" => {
+        "sim-disconnected" | "sim-backlog" => {
             attempts = 8;
             open = 0;
             max_active = scale;
+            if family == "sim-backlog" {
+                sla = 10_000;
+            }
         }
         "sim-history" => {
             attempts = 8;
@@ -261,7 +310,7 @@ pub fn simulation_case(family: &str, scale: usize) -> Scenario {
             sla = 0;
             cap = None;
         }
-        "sim-pinned" => {
+        "sim-pinned" | "sim-pinned-direct" => {
             // The downstream service is open when a path is pinned but closed on arrival.
             net = network(3);
             net.rails = vec![
@@ -273,6 +322,9 @@ pub fn simulation_case(family: &str, scale: usize) -> Scenario {
             sla = 1;
             cap = None;
             period = scale as u64;
+            if family == "sim-pinned-direct" {
+                net.rails.drain(..2);
+            }
         }
         _ => panic!("unknown simulation family {family}"),
     }
@@ -281,7 +333,7 @@ pub fn simulation_case(family: &str, scale: usize) -> Scenario {
         .iter()
         .map(|r| RailService {
             rail_id: r.id.clone(),
-            period_minutes: if family == "sim-pinned" && r.id != "R001" {
+            period_minutes: if family.starts_with("sim-pinned") && r.id != "R001" {
                 1
             } else {
                 period
@@ -316,23 +368,27 @@ pub fn simulation_case(family: &str, scale: usize) -> Scenario {
 /// The timetable covers every release through the cohort's maximum deadline.
 /// Aggregate static capacities are a relaxation of the same timetable.
 pub fn capture_window(width: usize, seed: u64) -> (StaticCase, String) {
-    let config = simulation_case("window-schedule", 4);
+    capture_window_capacity(width, seed, 10)
+}
+
+pub fn capture_window_capacity(width: usize, seed: u64, capacity: u64) -> (StaticCase, String) {
+    let mut config = simulation_case("window-schedule", 4);
+    config.services[0].capacity_per_minute_cents = Some(capacity);
     let mut sim = Simulator::new(config.clone(), seed).unwrap();
     let start = 8_u64;
     let mut timed = vec![];
     for _ in 0..start + width as u64 {
         for e in sim.step().unwrap().events {
-            if e.minute >= u128::from(start) {
-                if let EventKind::Generated {
+            if e.minute >= u128::from(start)
+                && let EventKind::Generated {
                     payment, deadline, ..
                 } = e.kind
-                {
-                    timed.push(TimedPayment {
-                        payment,
-                        earliest_execution_minute: e.minute as u64,
-                        deadline_minute: Some(deadline as u64),
-                    });
-                }
+            {
+                timed.push(TimedPayment {
+                    payment,
+                    earliest_execution_minute: e.minute as u64,
+                    deadline_minute: Some(deadline as u64),
+                });
             }
         }
     }

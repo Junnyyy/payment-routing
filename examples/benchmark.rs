@@ -175,7 +175,11 @@ fn main() {
         return;
     }
     let (case, provenance) = if family.starts_with("window-") {
-        fixtures::capture_window(scale, seed)
+        if family.starts_with("window-contended-") {
+            fixtures::capture_window_capacity(scale, seed, 2)
+        } else {
+            fixtures::capture_window(scale, seed)
+        }
     } else {
         (
             fixtures::static_case(family, scale),
@@ -202,7 +206,9 @@ fn main() {
     let mut out = Record::default();
     out.string("kind", "result");
     reset();
-    let (score, witness, elapsed) = if family.starts_with("single-") || family == "window-static" {
+    let (score, witness, elapsed) = if family.starts_with("single-")
+        || (family.starts_with("window-") && family.ends_with("-static"))
+    {
         let start = Instant::now();
         let routes: Vec<_> = case
             .payments
@@ -222,7 +228,9 @@ fn main() {
             }
         }
         (feasible.then_some(score), format!("{routes:?}"), elapsed)
-    } else if family.starts_with("batch-") || family == "window-batch" {
+    } else if family.starts_with("batch-")
+        || (family.starts_with("window-") && family.ends_with("-batch"))
+    {
         let start = Instant::now();
         let plan = optimize_batch(&case.network, &case.payments).unwrap();
         let elapsed = start.elapsed().as_nanos();

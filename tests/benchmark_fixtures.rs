@@ -15,6 +15,8 @@ fn constructed_cases_match_independent_oracles_including_full_tie_rank() {
     for family in [
         "batch-volume",
         "batch-ties",
+        "batch-latency-ties",
+        "batch-choices",
         "batch-scarce",
         "batch-infeasible",
         "batch-ceiling",
@@ -42,6 +44,9 @@ fn constructed_cases_match_independent_oracles_including_full_tie_rank() {
     }
     for family in [
         "schedule-ties",
+        "schedule-latency-ties",
+        "schedule-reverse-deadline",
+        "schedule-multihop-slots",
         "schedule-contention",
         "schedule-deadline",
         "schedule-slots",
@@ -117,4 +122,18 @@ fn witness_audit_rejects_a_corrupted_objective_and_budget() {
     let mut n = c.network;
     n.rails[0].batch_capacity_cents = Some(0);
     assert!(std::panic::catch_unwind(|| audit::batch(&n, &c.payments, &p)).is_err());
+}
+
+#[test]
+fn future_closed_hop_is_a_quality_failure_even_with_zero_queue() {
+    use payment_routing::simulation::Simulator;
+    let mut trap = Simulator::new(fixtures::simulation_case("sim-pinned", 2), 42).unwrap();
+    let mut control =
+        Simulator::new(fixtures::simulation_case("sim-pinned-direct", 2), 42).unwrap();
+    trap.advance_ticks(100).unwrap();
+    control.advance_ticks(100).unwrap();
+    assert_eq!(trap.metrics().generated, control.metrics().generated);
+    assert!(trap.metrics().expired > 0);
+    assert_eq!(control.metrics().completed, control.metrics().generated);
+    assert_eq!(control.metrics().sla_failures, 0);
 }
