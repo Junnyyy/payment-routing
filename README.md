@@ -49,12 +49,13 @@ The rails appear in this stable order. **Every membership, fee and timing value 
 
 RTP, ACH and Fedwire retain the existing instant, batch and wire fixture inputs respectively. FedNow is a fourth rail that reuses the synthetic instant membership, fee and timing inputs. The shared values are a demo choice and do not imply that RTP and FedNow operate identically. Institutions, balances and payment instructions are unchanged.
 
-Payments are unassigned instructions. The application does not choose routes, assess feasibility, incur fees, move funds or settle payments. There is no routing optimization or external optimization solver. Scenario-file import, multiple currencies and execution are outside this foundation.
+Payments remain unassigned instructions in the Stage 0 viewer. The library also exposes `routing::route_payment(&network, &payment)` for read-only, minimum-fee routing through shared rails. It returns `Ok(Some(route))`, `Ok(None)` when no route exists, or a validation error for malformed input. It never incurs fees, moves funds or settles payments. Scenario-file import, multiple currencies and execution remain outside this foundation; no external optimization solver is used.
 
 ## Code layout
 
 - `src/network.rs`: terminal-independent records, reference validation and exact aggregate calculations. Empty collections are supported. Totals use `u128` to safely sum `u64` amounts.
 - `src/demo.rs`: the built-in deterministic fixture.
+- `src/routing.rs`: exact single-payment routing, independent of terminal rendering.
 - `src/lib.rs`: exports the domain and fixture for reuse without UI types.
 - `src/app.rs`: selected view, per-table state and keyboard handling.
 - `src/ui.rs`: Ratatui widgets and money formatting.

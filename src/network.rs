@@ -29,6 +29,29 @@ pub struct Payment {
     pub amount_cents: u64,
 }
 
+impl Payment {
+    /// Validate an instruction, including one not stored in the network.
+    /// Validity does not imply a route or sufficient funding.
+    pub fn validate(&self, network: &Network) -> Result<(), ValidationError> {
+        unique_ids("payment", std::iter::once(self.id.as_str()))?;
+        for endpoint in [&self.sender, &self.receiver] {
+            if !network.institutions.iter().any(|i| &i.id == endpoint) {
+                return Err(ValidationError(format!(
+                    "payment {} references unknown institution {endpoint}",
+                    self.id
+                )));
+            }
+        }
+        if self.amount_cents == 0 || self.sender == self.receiver {
+            return Err(ValidationError(format!(
+                "payment {} needs a positive amount and different endpoints",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Network {
     pub name: String,
@@ -102,20 +125,7 @@ impl Network {
             }
         }
         for payment in &self.payments {
-            for endpoint in [&payment.sender, &payment.receiver] {
-                if !institutions.contains(endpoint.as_str()) {
-                    return Err(ValidationError(format!(
-                        "payment {} references unknown institution {endpoint}",
-                        payment.id
-                    )));
-                }
-            }
-            if payment.amount_cents == 0 || payment.sender == payment.receiver {
-                return Err(ValidationError(format!(
-                    "payment {} needs a positive amount and different endpoints",
-                    payment.id
-                )));
-            }
+            payment.validate(self)?;
         }
         Ok(())
     }
