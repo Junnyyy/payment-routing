@@ -1,0 +1,13 @@
+Synthetic USD simulation; accelerated example timings; seed 42; 10000 minutes
+Strategy: CheapestStatic
+Replay: every event and final state identical with manual vs paced/paused stepping
+Generated: 19520; completed: 12849; expired: 6665; rejected: 0; active: 6
+Completed principal: 936696841 cents; actual routing cost: 4694565 cents
+SLA failures: 6665; late completions: 0; completed elapsed: 43238 minutes
+Events emitted: 126264; retained: 32; peak active: 15/64
+ACH: departed 465881067 cents; settled 465881067 cents; fees 28440 cents
+FEDNOW: departed 248368530 cents; settled 248368530 cents; fees 112550 cents
+FEDWIRE: departed 237755488 cents; settled 237630937 cents; fees 4537500 cents
+RTP: departed 42931987 cents; settled 42931987 cents; fees 16075 cents
+Restart: identical state after replay from seed
+Routing diagnostics: SearchDiagnostics { searches: 0, expansions: 0, candidates: 0, truncated_searches: 0, unresolved: 0, repair_trials: 0 }; live reservation entries: 0
