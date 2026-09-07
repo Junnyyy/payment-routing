@@ -51,6 +51,8 @@ terminal modes; simulation errors pause and retain the last committed twin state
 - **Payments:** newest first by default. Moving selection holds a payment ID as
   rows change; Home resumes following newest. Filters apply to retained records.
   A selected record that ages out of retention falls back to the newest match.
+  ID and deadline columns grow to fit their values. When the terminal cannot fit
+  them on one line, continuation lines preserve every digit within the same row.
   Enter shows endpoints, deadline, status, the other strategy's retained result,
   actual fees and elapsed completion time, accepted route and reserved departure
   timestamps (including same-tick completions), search evidence, and a bounded
@@ -171,6 +173,10 @@ across 300 ticks per scenario. An additional headless run at seed 7 checks 1,000
 ticks per scenario against both ordinary simulators. TestBackend renders all six views at 80×18 and
 120×32, with empty/no-result and undersized cases, retained terminal-payment
 investigation, keyboard controls, selection identity, and scrolling.
+Separate rendering fixtures cover million-scale IDs/deadlines and `u128::MAX`
+values at 80, 120 and 180 columns, including selection and inspection of wrapped
+rows. These fixtures exercise large values directly rather than claiming a run
+has reached those counts or times.
 
 The standard-library PTY harness launches the actual binary. It exercises
 start/pause, stepping, speed, search, payment/rail inspection, comparison,
@@ -184,6 +190,7 @@ terminal emulator. Snapshots live under ignored `target/console-pty`.
 Version-specific Context7 references used with detected Ratatui 0.30.0 and its
 locked Crossterm 0.29.0 re-export: [Table / row_highlight_style](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Table.html#method.row_highlight_style),
 [TableState](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.TableState.html),
+[Row / height](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Row.html#method.height),
 [Paragraph / scroll](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Paragraph.html#method.scroll),
 [initialization and restoration](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/src/init.rs),
 and [Crossterm re-export](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/ratatui-crossterm/README.md).
