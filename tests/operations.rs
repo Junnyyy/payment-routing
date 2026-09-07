@@ -186,3 +186,54 @@ fn reserved_dossiers_keep_same_tick_and_future_departures_for_every_hop() {
         assert_eq!(replay, final_state);
     }
 }
+
+#[test]
+fn operations_apply_disruptions_atomically_and_retain_revised_witnesses() {
+    use payment_routing::simulation::{EventKind, RailUpdate, ReoptimizationPolicy};
+    let mut ops = Operations::new(Preset::Disruptions, 42).unwrap();
+    let before = ops.clone();
+    assert!(
+        ops.queue_rail_update(RailUpdate {
+            rail_id: "missing".into(),
+            available: Some(false),
+            capacity_per_minute_cents: None
+        })
+        .is_err()
+    );
+    assert_eq!(ops, before);
+    ops.set_reoptimization_policy(ReoptimizationPolicy::Preserve);
+    for minute in 0..40 {
+        if minute % 2 == 0 {
+            ops.queue_rail_update(RailUpdate {
+                rail_id: "FEDNOW".into(),
+                available: Some(minute % 4 == 0),
+                capacity_per_minute_cents: None,
+            })
+            .unwrap();
+        }
+        ops.step().unwrap();
+        for run in &ops.runs {
+            assert!(run.network_events.len() <= 32);
+            for p in run.simulator.active_payments() {
+                let dossier = &run.payments[&p.sequence];
+                assert_eq!(dossier.route, p.route);
+                assert_eq!(dossier.planned_departures, p.planned_departures);
+            }
+        }
+    }
+    assert!(
+        ops.runs[1]
+            .network_events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::Reoptimized(_)))
+    );
+    ops.restart(42).unwrap();
+    for run in &ops.runs {
+        assert!(run.network_events.is_empty());
+        assert_eq!(
+            run.simulator.reoptimization_policy(),
+            ReoptimizationPolicy::Preserve
+        );
+        assert_eq!(run.simulator.pending_rail_updates(), 0);
+    }
+}

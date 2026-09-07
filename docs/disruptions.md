@@ -56,3 +56,58 @@ documented [BTreeMap iteration](https://doc.rust-lang.org/stable/std/collections
 [entry](https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#method.entry)
 and [retain](https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#method.retain)
 APIs already used in this repository; no dependency changes are required.
+
+
+## Simulation interfaces
+
+`Scenario.disruptions` contains `Disruption { minute, update }` records. Each
+`RailUpdate` names an existing `rail_id`, an optional `available` value, and an
+optional `capacity_per_minute_cents` replacement. `None` leaves a field unchanged;
+`Some(Some(0))` sets zero capacity and `Some(None)` removes the limit. Reject empty
+updates, unknown rails, and duplicate scheduled `(minute, rail)` pairs before
+execution. Input event order is canonicalized; distinct rail updates at one
+minute form one reoptimization decision. Same-tick controls merge over scheduled
+fields, with the last control write per field winning. An effective no-op emits
+no disruption or churn and does not reoptimize.
+
+```rust
+use payment_routing::simulation::{RailUpdate, ReoptimizationPolicy};
+// `sim` is an existing Simulator; this control applies at its next minute.
+let mut sim = payment_routing::simulation::Simulator::new(
+    payment_routing::operations::Preset::Balanced.scenario(
+        payment_routing::simulation::RoutingStrategy::Reserved { limits: Default::default() }
+    ), 42).unwrap();
+sim.queue_rail_update(RailUpdate {
+    rail_id: "ACH".into(),
+    available: Some(false),
+    capacity_per_minute_cents: None,
+})?;
+sim.set_reoptimization_policy(ReoptimizationPolicy::Adaptive {
+    max_extra_fee_cents: 0,
+    max_extra_elapsed_minutes: 0,
+});
+let report = sim.step()?;
+Ok::<(), payment_routing::simulation::SimulationError>(())
+```
+
+`scenario()` remains the original validated input; `effective_scenario()` exposes
+current conditions. `pending_rail_updates()` is bounded by rail count.
+`adaptation_metrics()` exposes cumulative comparisons/churn/withdrawals, and
+`last_reoptimization()` includes its decision minute, policy, both assessments,
+selected candidate, cohort comparability and both sets of search diagnostics.
+
+`TickReport.events` includes `DisruptionApplied` with before/after conditions,
+`Reoptimized` with the comparison, and `PlanRevised` with the selected composed
+route and timestamps. An absent route or a route ending short of the instruction's
+receiver means the future suffix is unresolved. `has_complete_plan()` distinguishes
+that case. Completed/expired/rejected payments still leave active storage; normal
+history bounds apply to new events too. Observation captures selected timestamps
+separately from bounded traces of discarded candidate searches.
+
+For ordinary reserved admission, existing commitments stay fixed. Only an effective
+disruption triggers reconsideration of the existing cohort. Subsequent arrivals
+and retries may create additional plans after the reported comparison, so the
+candidate assessments describe that decision, not every later event in the tick.
+Recompute and Preserve choose their named candidate even if the other has higher
+coverage. Adaptive is the default; preservation is not a hard promise to keep
+invalid capacity or closed-rail assignments.

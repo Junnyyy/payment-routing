@@ -13,7 +13,7 @@ cargo run --locked -- --demo
 
 Starts paused before minute 0. Use **Space** to run/pause, **.** to step,
 **+/-** for speed, **r** to restart, **n** for the next seed and **c** to cycle
-balanced/pressure/outage/limited scenarios. **1–6** select overview, payments,
+balanced/pressure/outage/limited/disruptions scenarios. **1–6** select overview, payments,
 rails, network, optimizer and comparison. **s** inspects the other strategy.
 **j/k** select/scroll; **Enter** inspects a payment or rail and pauses; **f** filters
 payments; **/** searches; **?** opens help. **q / Ctrl-C** quit; **Esc** closes a
@@ -26,7 +26,7 @@ is needed. Use `--offline` after dependencies have been fetched.
 
 See the [operations guide](docs/operations-console.md) for all keys, metric and
 evidence definitions, retention limits, reproducible scenario results, and actual
-PTY verification. Reproduce the console's four scenarios without a terminal:
+PTY verification. Reproduce the console's five scenarios without a terminal:
 
 ```sh
 cargo run --locked --example operations -- 80 42
@@ -34,6 +34,27 @@ cargo run --locked --example operations -- 80 42
 
 The console uses accelerated execution fixtures; the static reference below is
 unchanged. All data and operating rules are synthetic USD.
+
+## Disruptions and adaptive routing
+
+```sh
+cargo run --locked -- --demo --scenario disruptions
+cargo run --locked --example disruptions
+```
+
+The disruption preset closes/reopens ACH and reduces/restores ACH and RTP capacity during
+execution. The optimizer view compares preservation and full recomputation from
+the same active cohort, including planned coverage, remaining fees/time and
+assignment churn. Rail and payment investigations retain the changes and revised
+witnesses. All optimization remains in the terminal-independent library.
+
+`Scenario::disruptions` defines deterministic surprise events;
+`Simulator::queue_rail_update` and `Operations::queue_rail_update` stage explicit
+next-tick controls. Executed/in-flight hops remain fixed, invalid future
+reservations are released, and unresolved suffixes queue until repaired or expired.
+The default adaptive policy permits zero extra fees or elapsed minutes relative
+to recomputation. Preservation and explicit fee/time allowances are also available.
+See the [contract and API](docs/disruptions.md) and [measured tradeoffs](docs/disruption-report.md).
 
 ## Static reference fixture
 

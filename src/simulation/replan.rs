@@ -348,6 +348,7 @@ impl State {
             }
         };
         let report = ReoptimizationReport {
+            minute: self.next_minute,
             policy,
             selected: if keep {
                 ReoptimizationChoice::Preserve

@@ -201,7 +201,7 @@ def main():
         session.abort()
         raise
     print("PASS balanced: step, speed, run/pause, payment search/detail, rail detail, comparison, reset/seed, resize, q cleanup")
-    for preset, exit_key in [("pressure", b"\x1b"), ("outage", b"\x03"), ("limited", b"q")]:
+    for preset, exit_key in [("pressure", b"\x1b"), ("outage", b"\x03"), ("limited", b"q"), ("disruptions", b"q")]:
         session = Session(preset)
         try:
             session.send(b"." * 80)
@@ -209,7 +209,12 @@ def main():
             session.send(b"5")
             session.snapshot(f"{preset}-optimizer")
             if preset == "limited":
-                assert "TRUNCATED" in session.screen.text()
+                session.send(b"\x1b[6~")
+                session.until(lambda s: "TRUNCATED" in s)
+            if preset == "disruptions":
+                assert "DISRUPTIONS 6" in session.screen.text()
+                assert "LAST REPAIR" in session.screen.text()
+                assert "Preserve:" in session.screen.text()
             session.send(b"6")
             session.snapshot(f"{preset}-comparison")
             session.finish(exit_key)

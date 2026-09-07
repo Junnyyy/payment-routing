@@ -168,7 +168,7 @@ python3 scripts/test_console.py
 ```
 
 Tests compare observation with ordinary simulation state/event-for-event across
-four scenarios and both policies, replay twin runs on restart, and bound histories
+five scenarios and both policies, replay twin runs on restart, and bound histories
 across 300 ticks per scenario. An additional headless run at seed 7 checks 1,000
 ticks per scenario against both ordinary simulators. TestBackend renders all six views at 80×18 and
 120×32, with empty/no-result and undersized cases, retained terminal-payment
@@ -195,3 +195,30 @@ locked Crossterm 0.29.0 re-export: [Table / row_highlight_style](https://docs.rs
 [initialization and restoration](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/src/init.rs),
 and [Crossterm re-export](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/ratatui-crossterm/README.md).
 No dependencies were added or upgraded.
+
+
+## Dynamic disruptions
+
+`--scenario disruptions` uses the balanced demand fixture, closes ACH at minute 4,
+reduces RTP to 10,000 cents/minute at minute 8, reopens ACH at minute 12, and
+reduces ACH to 10,000 cents/minute at minute 16, then restores ACH to 200,000
+and RTP to 100,000 cents/minute at minute 20. Changes are surprises at those
+ticks; the router does not read future scenario events. The static demo fixture
+is unchanged. At seed 42 after 80 ticks, static completes 93, expires 66 and spends
+41,680 cents; reserved completes 90, expires 67 and spends 35,570 cents. Reserved
+changes 3 of 5 previously planned assignments across five repair decisions. Both
+generate 163 payments; these different completion cohorts are not quality gaps.
+
+Overview reports aggregate assignment churn. Optimizer shows both candidate
+assessments at 80×18, the selected policy and explicit allowances, and recent rail
+changes. Rails uses effective capacity/availability and retains change evidence;
+payment details distinguish an accepted route from a fixed prefix awaiting a new
+suffix. `PlanRevised` carries the final composed witness even for same-tick
+completion; `Reoptimized` contains both assessments. Operations retains the newest
+32 network events independently of its payment dossiers and normal event ring.
+
+`Operations::queue_rail_update` validates/stages a control for both runs or neither.
+`set_reoptimization_policy` applies to both; restart preserves the explicit policy
+and replays the original scheduled changes, discarding pending controls. Rendering
+never triggers optimization. See [disruption semantics](disruptions.md) and the
+[matched-cohort report](disruption-report.md). The PTY harness also runs this preset.

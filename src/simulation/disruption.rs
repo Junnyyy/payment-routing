@@ -89,6 +89,7 @@ pub struct PlanAssessment {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReoptimizationReport {
+    pub minute: u128,
     pub policy: ReoptimizationPolicy,
     pub selected: ReoptimizationChoice,
     pub preserve: PlanAssessment,

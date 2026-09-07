@@ -96,7 +96,8 @@ onto a 14-cent multihop route, freeing two units for the large payment. Four
 whole-batch orders miss this exchange. This is the next quality experiment:
 try at most 16 pairs, each in both orders, against all other fixed reservations.
 Only groups of at most 16 enter this repair pass; larger groups retain bounded
-order trials. Earlier online commitments are never reconsidered.
+order trials. Earlier online commitments are fixed for ordinary admission. Disruptions explicitly
+reconsider unexecuted suffixes through the separate [adaptive layer](disruptions.md).
 
 Dense simulation now takes 14.69 / 28.03 / 56.52 ms per 1,000 ticks at 128 / 256 /
 512 institutions. At 512 the observed p95 tick is 84.9 microseconds and peak
@@ -112,7 +113,7 @@ contains the exact fee and gap for both the static and reserved policies.
 schedule cases and all 16 exact online cohorts have zero fee gap. The 67.72%
 case falls from 213 to 127 cents. All previous failures remain in earlier logs.
 Repair costs more on small heterogeneous batches; it is skipped for large
-batches and equal-fee fully allocated groups. It never releases earlier online
+batches and equal-fee fully allocated groups. Ordinary admission never releases earlier online
 commitments.
 
 A new sparse mesh (two local service links per institution plus an expensive

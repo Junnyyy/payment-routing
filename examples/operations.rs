@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("Synthetic USD; accelerated scenarios; seed {seed}; {ticks} ticks; fees in cents");
     println!(
-        "scenario,strategy,generated,completed,late,expired,rejected,active,sla_failures,fees,completed_cents,truncated"
+        "scenario,strategy,generated,completed,late,expired,rejected,active,sla_failures,fees,completed_cents,truncated,rail_changes,churn,assignment_comparisons"
     );
     for preset in Preset::ALL {
         let mut ops = Operations::new(preset, seed)?;
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             run.simulator.check_invariants()?;
             let m = run.simulator.metrics();
             println!(
-                "{},{},{},{},{},{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
                 preset.name(),
                 if i == 0 { "static" } else { "reserved" },
                 m.generated,
@@ -46,7 +46,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 m.sla_failures,
                 m.routing_cost_cents,
                 m.completed_volume_cents,
-                run.simulator.routing_diagnostics().truncated_searches
+                run.simulator.routing_diagnostics().truncated_searches,
+                run.simulator.adaptation_metrics().rail_changes,
+                run.simulator.adaptation_metrics().changed_assignments,
+                run.simulator.adaptation_metrics().assignment_comparisons
             );
         }
     }
