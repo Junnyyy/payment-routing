@@ -39,11 +39,15 @@ impl RailService {
     }
 }
 
-/// The initial policy delegates path selection to the existing static router.
-/// It considers current availability/capacity, then pins each accepted path.
+/// Select the original exact static policy or bounded reserved execution.
+/// Only the reserved policy commits a complete feasible departure calendar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutingStrategy {
     CheapestStatic,
+    /// Bounded window-aware routing with complete per-departure reservations.
+    Reserved {
+        limits: crate::scalable::SearchLimits,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +64,9 @@ pub struct Scenario {
 impl Scenario {
     pub fn validate(&self) -> Result<(), ValidationError> {
         self.network.validate()?;
+        if let RoutingStrategy::Reserved { limits } = self.strategy {
+            limits.validate()?;
+        }
         let arrivals = &self.arrivals;
         if arrivals.probability_per_million > 1_000_000
             || arrivals.min_amount_cents == 0

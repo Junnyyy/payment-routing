@@ -1,8 +1,12 @@
 //! One fresh-process benchmark worker; use scripts/benchmark.py for supervision.
 #[path = "../benchmarks/audit.rs"]
 mod audit;
+#[path = "../tests/support/simulation_audit.rs"]
+mod event_audit;
 #[path = "../benchmarks/fixtures.rs"]
 mod fixtures;
+#[path = "../benchmarks/quality.rs"]
+mod quality;
 use payment_routing::{
     batch::optimize_batch, routing::route_payment, scheduling::optimize_schedule, simulation::*,
 };
@@ -88,7 +92,8 @@ fn main() {
         (3..=5).contains(&a.len()),
         "worker FAMILY SCALE SEED [TICKS] [--dump]"
     );
-    let family = &a[0];
+    let heuristic = a[0].starts_with("bounded-");
+    let family = a[0].strip_prefix("bounded-").unwrap_or(&a[0]);
     let scale: usize = a[1].parse().unwrap();
     let seed: u64 = a[2].parse().unwrap();
     assert!(
@@ -113,7 +118,18 @@ fn main() {
     meta.number("scale", scale);
     meta.number("seed", seed);
     if family.starts_with("sim-") {
-        let config = fixtures::simulation_case(family, scale);
+        let mut config = if family == "sim-mesh" {
+            quality::mesh(scale, seed)
+        } else if family == "sim-quality" {
+            quality::online(seed)
+        } else {
+            fixtures::simulation_case(family, scale)
+        };
+        if heuristic {
+            config.strategy = RoutingStrategy::Reserved {
+                limits: Default::default(),
+            };
+        }
         let input = format!("{config:?};seed={seed};ticks={ticks}");
         topology(&mut meta, &config.network);
         meta.number("ticks", ticks);
@@ -124,14 +140,23 @@ fn main() {
             meta.string("fixture", &input);
         }
         meta.print();
-        let mut sim = Simulator::new(config, seed).unwrap();
+        let mut sim = Simulator::new(config.clone(), seed).unwrap();
+        let mut cohort_events = vec![];
+        let mut independent = event_audit::Audit::default();
         let mut active = vec![];
         let mut queued = vec![];
         let mut waits = vec![];
+        let mut tick_ns = vec![];
         reset();
         let start = Instant::now();
         for _ in 0..ticks {
-            sim.step().unwrap();
+            let tick_start = Instant::now();
+            let report = sim.step().unwrap();
+            tick_ns.push(tick_start.elapsed().as_nanos());
+            if family == "sim-quality" {
+                independent.check(&config, &report, &sim);
+                cohort_events.extend(report.events);
+            }
             let work = sim.active_payments();
             active.push(work.len());
             queued.push(work.iter().filter(|p| p.in_flight_until.is_none()).count());
@@ -151,6 +176,68 @@ fn main() {
         out.string("kind", "result");
         out.string("status", "simulated");
         out.number("solve_ns", elapsed);
+        tick_ns.sort_unstable();
+        out.number(
+            "tick_ns_p95",
+            tick_ns[(tick_ns.len() * 95).div_ceil(100) - 1],
+        );
+        out.number("tick_ns_max", tick_ns.last().unwrap());
+        out.number(
+            "routing_truncated",
+            sim.routing_diagnostics().truncated_searches,
+        );
+        out.number("routing_unresolved", sim.routing_diagnostics().unresolved);
+        out.number("reservation_entries_end", sim.reservation_entries());
+        if family == "sim-quality" {
+            use payment_routing::scheduling::*;
+            assert_eq!(m.completed, m.generated);
+            assert_eq!(m.sla_failures, 0);
+            let payments: Vec<_> = cohort_events
+                .iter()
+                .filter_map(|e| match &e.kind {
+                    EventKind::Generated {
+                        payment, deadline, ..
+                    } => Some(TimedPayment {
+                        payment: payment.clone(),
+                        earliest_execution_minute: e.minute as u64,
+                        deadline_minute: Some(*deadline as u64),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            let slots: Vec<_> = (0..ticks)
+                .flat_map(|time| config.network.rails.iter().map(move |rail| (time, rail)))
+                .map(|(time, r)| RailDeparture {
+                    rail_id: r.id.clone(),
+                    departure_minute: time,
+                    fee_cents: None,
+                    settlement_minutes: None,
+                    capacity_cents: config
+                        .services
+                        .iter()
+                        .find(|s| s.rail_id == r.id)
+                        .unwrap()
+                        .capacity_per_minute_cents,
+                })
+                .collect();
+            let oracle_start = Instant::now();
+            let optimum = optimize_schedule(&config.network, &payments, &slots)
+                .unwrap()
+                .unwrap();
+            out.number("oracle_ns", oracle_start.elapsed().as_nanos());
+            audit::schedule(&config.network, &payments, &slots, &optimum);
+            out.number("known_optimum_fee", optimum.total_fee_cents);
+            out.number(
+                "optimality_gap_percent",
+                if optimum.total_fee_cents == 0 {
+                    0.0
+                } else {
+                    100.0 * (m.routing_cost_cents - optimum.total_fee_cents) as f64
+                        / optimum.total_fee_cents as f64
+                },
+            );
+            out.string("oracle_scope","identical complete generated cohort; zero SLA; no carry-in or background; exact full schedule");
+        }
         out.number("generated", m.generated);
         out.number("completed", m.completed);
         out.number("completed_on_time", m.completed - m.completed_late);
@@ -189,7 +276,20 @@ fn main() {
         }
     } else {
         (
-            fixtures::static_case(family, scale),
+            if [
+                "schedule-trap",
+                "schedule-trap-blocked",
+                "schedule-dense",
+                "schedule-knapsack",
+                "schedule-random",
+                "schedule-mixed",
+            ]
+            .contains(&family)
+            {
+                quality::case(family, scale, seed)
+            } else {
+                fixtures::static_case(family, scale)
+            },
             "constructed fixture v1".into(),
         )
     };
@@ -224,7 +324,34 @@ fn main() {
     let mut out = Record::default();
     out.string("kind", "result");
     reset();
-    let (score, witness, elapsed) = if family.starts_with("single-")
+    let (score, witness, elapsed) = if heuristic {
+        let start = Instant::now();
+        let result = payment_routing::scalable::plan_schedule(
+            &case.network,
+            &case.timed,
+            &case.slots,
+            Default::default(),
+        )
+        .unwrap();
+        let elapsed = start.elapsed().as_nanos();
+        stats(&mut out);
+        out.number("routing_truncated", result.diagnostics.truncated_searches);
+        out.number("routing_unresolved", result.diagnostics.unresolved);
+        if let Some(p) = &result.plan {
+            audit::schedule(&case.network, &case.timed, &case.slots, p);
+        }
+        (
+            result.plan.as_ref().map(|p| {
+                (
+                    p.total_fee_cents,
+                    p.total_elapsed_minutes,
+                    p.assignments.iter().map(|a| a.route.hops.len()).sum(),
+                )
+            }),
+            format!("{:?}", result.plan),
+            elapsed,
+        )
+    } else if family.starts_with("single-")
         || (family.starts_with("window-") && family.ends_with("-static"))
     {
         let start = Instant::now();
@@ -291,17 +418,28 @@ fn main() {
         assert!(score.is_none());
     }
     if let Some(expected) = case.expected_fee {
-        assert_eq!(score.unwrap().0, expected);
+        if !heuristic {
+            assert_eq!(score.unwrap().0, expected);
+        }
         out.number("known_optimum_fee", expected);
     }
     out.string(
         "status",
-        if score.is_some() {
+        if heuristic {
+            if score.is_some() {
+                "feasible"
+            } else {
+                "unresolved"
+            }
+        } else if score.is_some() {
             "optimal"
         } else {
             "infeasible"
         },
     );
+    if !heuristic && score.is_some() {
+        out.number("optimality_gap_percent", 0);
+    }
     if let Some((f, t, h)) = score {
         out.number("fee_cents", f);
         out.number("objective_minutes", t);

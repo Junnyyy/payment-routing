@@ -271,16 +271,18 @@ splitting or real settlement.
 ## Continuous simulation
 
 `simulation::Simulator` generates seeded payment arrivals, routes them with the
-existing static router, and executes hops against recurring rail availability and
+selected routing strategy, and executes hops against recurring rail availability and
 shared per-minute principal budgets. It tracks queued and in-flight payments,
 inclusive deadlines, actual executed fees, completed volume and SLA failures.
-Routing is a simple FIFO policy with pinned paths; accepted routes can miss their
-deadlines while waiting for downstream service or capacity.
+`CheapestStatic` keeps the original FIFO pinned-path behavior. `Reserved` uses
+bounded calendar-aware search and complete capacity reservations; accepted work
+meets its deadline. Work without a feasible found plan stays queued until expiry.
 
 Run the headless example, optionally specifying a tick count and seed:
 
 ```sh
-cargo run --locked --example simulate -- 10000 42
+cargo run --locked --example simulate -- 10000 42 reserved
+# Original policy: omit reserved, or supply static.
 ```
 
 This example uses the six-institution topology with explicitly accelerated,
@@ -289,7 +291,8 @@ event and the final state match between manual and paced/paused stepping, then
 checks a restart from the same seed. It does not initialize a terminal.
 
 Build a `Scenario` from a validated network, an `ArrivalProcess`, one `RailService`
-per rail, `RoutingStrategy::CheapestStatic`, and active/history limits. Construct
+per rail, `RoutingStrategy::Reserved { limits: Default::default() }` (or
+`CheapestStatic`), and active/history limits. Construct
 `Simulator::new(scenario, seed)`, then use these controls:
 
 | API | Behavior |
@@ -322,7 +325,14 @@ fixtures and seeded simulation windows, including observed time/memory frontiers
 objective quality, search effort, capacity saturation and queue behavior. See the
 [fixture catalog and reproduction commands](benchmarks/README.md) to rerun or extend
 the suite. Timings use ordinary release builds; opt-in `search-stats` counters run
-separately. Optimizer strategy is unchanged.
+separately. The exact optimizers remain unchanged and independent.
+
+The [scalable-routing report](docs/scalable-routing-report.md) records successive
+algorithm experiments, every known-optimum fee gap, infeasible/unresolved cases,
+queue behavior and fresh-process timings. The [strategy contract](docs/scalable-routing.md)
+describes bounded search, reservations and the reproducible investigation log.
+`scalable::plan_schedule` exposes the same search for finite timetable batches;
+a missing full plan means unresolved, never a proof of infeasibility.
 
 ## Code layout
 

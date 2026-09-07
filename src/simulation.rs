@@ -8,6 +8,7 @@ pub use config::{ArrivalProcess, PaymentFlow, RailService, RoutingStrategy, Scen
 
 use std::{collections::VecDeque, error::Error, fmt};
 
+use crate::scalable::{Reservations, Router, SearchDiagnostics};
 use crate::{network::Payment, network::ValidationError, routing::Route, routing::RouteHop};
 use rng::Random;
 
@@ -76,6 +77,8 @@ pub struct ActivePayment {
     pub deadline: u128,
     pub route: Option<Route>,
     pub next_hop: usize,
+    /// Reserved departure times, aligned with route hops. None for CheapestStatic.
+    pub planned_departures: Option<Vec<u128>>,
     pub in_flight_until: Option<u128>,
     pub sla_failed: bool,
 }
@@ -160,6 +163,8 @@ struct State {
     metrics: Metrics,
     active: Vec<ActivePayment>,
     rails: Vec<RailState>,
+    reservations: Reservations,
+    routing_diagnostics: SearchDiagnostics,
 }
 
 /// A bounded-state deterministic model. Pacing belongs to the caller.
@@ -167,6 +172,7 @@ struct State {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Simulator {
     scenario: Scenario,
+    router: Router,
     seed: u64,
     running: bool,
     state: State,
@@ -185,8 +191,10 @@ impl Simulator {
             .services
             .sort_unstable_by(|a, b| a.rail_id.cmp(&b.rail_id));
         let state = Self::initial_state(&scenario, seed);
+        let router = Router::recurring(&scenario.network, &scenario.services);
         Ok(Self {
             scenario,
+            router,
             seed,
             running: false,
             state,
@@ -201,6 +209,8 @@ impl Simulator {
             random: Random(seed),
             metrics: Metrics::default(),
             active: vec![],
+            reservations: Reservations::default(),
+            routing_diagnostics: SearchDiagnostics::default(),
             rails: scenario
                 .network
                 .rails
@@ -240,6 +250,12 @@ impl Simulator {
     pub fn metrics(&self) -> &Metrics {
         &self.state.metrics
     }
+    pub fn routing_diagnostics(&self) -> SearchDiagnostics {
+        self.state.routing_diagnostics
+    }
+    pub fn reservation_entries(&self) -> usize {
+        self.state.reservations.slots.len()
+    }
     pub fn active_payments(&self) -> &[ActivePayment] {
         &self.state.active
     }
@@ -275,7 +291,7 @@ impl Simulator {
         // Only bounded mutable state is copied. History and fixed configuration
         // are not cloned per tick. Errors discard the working transaction.
         let mut next = self.state.clone();
-        let report = next.process_tick(&self.scenario)?;
+        let report = next.process_tick(&self.scenario, &self.router)?;
         next.check_invariants(&self.scenario)?;
         self.state = next;
         for event in &report.events {
@@ -309,7 +325,7 @@ mod tests {
     use super::*;
     use crate::demo::demo_network;
 
-    fn simulator() -> Simulator {
+    pub(super) fn simulator() -> Simulator {
         let mut network = demo_network();
         for rail in &mut network.rails {
             rail.settlement_minutes = 0;
@@ -384,5 +400,31 @@ mod tests {
         let before = sim.clone();
         assert!(matches!(sim.step(), Err(SimulationError::Invariant(_))));
         assert_eq!(sim, before);
+    }
+}
+
+#[cfg(test)]
+mod reserved_boundary_tests {
+    use super::*;
+    #[test]
+    fn reservation_errors_roll_back_and_timestamps_cross_u64() {
+        let mut sim = super::tests::simulator();
+        sim.scenario.strategy = RoutingStrategy::Reserved {
+            limits: Default::default(),
+        };
+        sim.state.next_minute = u128::from(u64::MAX);
+        sim.step().unwrap();
+        sim.step().unwrap();
+        for field in 0..3 {
+            let mut trial = sim.clone();
+            match field {
+                0 => trial.state.next_event = u128::MAX - 1,
+                1 => trial.state.next_minute = u128::MAX,
+                _ => trial.state.metrics.routing_cost_cents = u128::MAX,
+            }
+            let before = trial.clone();
+            assert!(trial.step().is_err());
+            assert_eq!(trial, before);
+        }
     }
 }

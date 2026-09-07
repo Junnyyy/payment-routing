@@ -1,0 +1,13 @@
+Synthetic USD simulation; accelerated example timings; seed 42; 10000 minutes
+Strategy: Reserved { limits: SearchLimits { labels_per_node: 16, max_labels: 8192, max_expansions: 4096, max_candidates: 100000, max_repairs: 16 } }
+Replay: every event and final state identical with manual vs paced/paused stepping
+Generated: 19520; completed: 12409; expired: 7105; rejected: 0; active: 6
+Completed principal: 887368453 cents; actual routing cost: 3242640 cents
+SLA failures: 7105; late completions: 0; completed elapsed: 58388 minutes
+Events emitted: 124744; retained: 32; peak active: 18/64
+ACH: departed 556074249 cents; settled 556074249 cents; fees 37090 cents
+FEDNOW: departed 185570818 cents; settled 185570818 cents; fees 82925 cents
+FEDWIRE: departed 166096282 cents; settled 166096282 cents; fees 3115500 cents
+RTP: departed 19558245 cents; settled 19558245 cents; fees 7125 cents
+Restart: identical state after replay from seed
+Routing diagnostics: SearchDiagnostics { searches: 521409, expansions: 1257258, candidates: 10612156, truncated_searches: 0, unresolved: 388492, repair_trials: 109785 }; live reservation entries: 2

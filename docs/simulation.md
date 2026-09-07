@@ -40,7 +40,7 @@ budgets. Existing static and finite-schedule APIs remain unchanged.
 3. Generates this minute's arrivals. At `max_active_payments`, records an explicit
    overload rejection instead of growing the queue. Settlement can free admission
    space; departures and deadline expiry later in this tick cannot.
-4. Processes active payments in sequence order. Unrouted payments consult the
+4. With `CheapestStatic`, processes active payments in sequence order. Unrouted payments consult the
    existing `route_payment` strategy using currently open rails with enough
    remaining principal capacity, and the remaining SLA budget. An accepted route
    is pinned; downstream hops wait for service and capacity. Capacity is consumed
@@ -53,7 +53,20 @@ budgets. Existing static and finite-schedule APIs remain unchanged.
    intermediate hop settles before the payment expires. No further hops depart
    after an SLA failure. Physical work already in flight is never erased.
 
-This deliberately simple FIFO, current-state strategy is not a joint optimizer
+With `Reserved { limits }`, step 4 first plans currently unassigned work against
+a sparse calendar containing every earlier commitment. It tries deterministic
+orders, and bounded pair repair for small heterogeneous groups, then accepts only
+complete feasible routes and reserves their full per-departure principal. Existing
+commitments remain fixed. Execution still follows sequence order and departs at
+the reserved timestamps. Same-minute zero-latency chains consume capacity for
+every hop. Unused prior-minute reservation entries are discarded. Before commit,
+the engine reconstructs future usage from active witnesses, compares it with the
+reservation ledger and checks each deadline. Accepted reserved routes cannot miss
+a deadline; unplanned work can expire, and admission overload remains explicit.
+`RouteAccepted` can reference a service that is closed now but open at its reserved
+departure. Fees remain actual departure costs, not reservation charges.
+
+The original deliberately simple FIFO, current-state strategy is not a joint optimizer
 and does not predict future closures or congestion. Routing acceptance does not
 promise delivery. Deadline zero still permits a same-minute zero-latency route.
 Rejections count as immediate service/SLA failures, separately from deadline
@@ -82,6 +95,8 @@ bounded storage: exhausting a numeric field returns an explicit error and leaves
 that entire tick, including RNG and events, unchanged. Previously successful ticks
 in `advance_ticks` stay committed. This is an explicit numeric limit, not silent
 wrapping or saturation. Only the specified 64-bit RNG wraps intentionally.
+Optional routing diagnostics use saturating counters and never control execution;
+per-search limits use local bounded work counts.
 
 ## Accounting invariants
 
@@ -97,7 +112,7 @@ wrapping or saturation. Only the specified 64-bit RNG wraps intentionally.
   event sequences, regardless of pauses, caller speed, or tick grouping. The
   driver's run flag independently reflects the last start/pause call.
 
-## Verification and measured limits
+## Original-policy verification and measured limits
 
 Verification on 2026-09-06 used Rust/Cargo 1.97.1 with the locked offline dependency
 graph. The suite contains 95 tests including documentation tests: 74 existing
@@ -136,9 +151,10 @@ No elapsed-time-dependent collection remains: active payments are capped, routes
 are simple, history is a ring, and the rail state has one record per service. The
 per-tick working transaction and returned event batch are bounded by the same
 scenario limits and arrivals per minute. Choosing enormous limits can still
-exhaust physical memory. The existing exact router remains exponential in network
-size and is called again for unrouted queued payments; this remains a small-network
-reference. The bounded tests establish correctness and sustained operation for
+exhaust physical memory. The `CheapestStatic` exact router remains exponential in network size and is
+called again for unrouted queued payments. `Reserved` bounds search expansions,
+candidates, labels and repair trials, and uses sparse recurring reservations;
+see the [measured scalable strategy](scalable-routing-report.md). The bounded tests establish correctness and sustained operation for
 these scenarios, not a throughput guarantee for arbitrary large topologies.
 
 ## Dependency references
@@ -151,3 +167,15 @@ are checked by compiling on the installed toolchain:
 [modular addition (`wrapping_add`)](https://doc.rust-lang.org/stable/std/primitive.u32.html#method.wrapping_add),
 [modular multiplication (`wrapping_mul`)](https://doc.rust-lang.org/stable/std/primitive.i64.html#method.wrapping_mul),
 and [checked addition (`checked_add`)](https://doc.rust-lang.org/stable/std/primitive.u16.html#method.checked_add).
+
+
+## Reserved-policy verification
+
+The same independent 128-scenario event accountant now also checks `Reserved`,
+including paired replay and grouped restart. A separate 100,000-tick overloaded
+run checks active, event-ring and reservation bounds and zero late completions.
+Numeric rollback tests cover reserved operation and crossing `u64::MAX` time.
+128 recurring-calendar cases compare the first accepted fee with the exact finite
+schedule; 3,940 independent bounded-walk/product scenarios check feasible batch
+witnesses and 7,880 single-request fee optima. The benchmark report distinguishes
+fee optimality from elapsed/hop/lexical quality and unknown online optima.

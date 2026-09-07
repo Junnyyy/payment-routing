@@ -81,11 +81,11 @@ def supervise(command, timeout, rss_mib):
 def deterministic_result(row):
     # All other result fields, including queue observations and counters, must replay.
     return {k: v for k, v in row["result"].items()
-            if k not in ("solve_ns", "instrumented")}
+            if k not in ("solve_ns", "instrumented", "tick_ns_p95", "tick_ns_max", "oracle_ns")}
 
 
 def verify_rows(rows):
-    complete = [r for r in rows if r["status"] in ("optimal", "infeasible", "simulated")]
+    complete = [r for r in rows if r["status"] in ("optimal", "infeasible", "simulated", "feasible", "unresolved")]
     fingerprints = {r["input"]["input_digest"] for r in rows if r["input"]}
     if len(fingerprints) > 1:
         raise AssertionError("input changed between repeats/builds")
@@ -101,7 +101,7 @@ def verify_rows(rows):
 
 def summary(rows):
     timing = [r for r in rows if r["mode"] == "plain"]
-    solved = [r for r in timing if r["status"] in ("optimal", "infeasible", "simulated")]
+    solved = [r for r in timing if r["status"] in ("optimal", "infeasible", "simulated", "feasible", "unresolved")]
     counted = next((r for r in rows if r["mode"] == "stats" and r["result"]), None)
     first = rows[0]
     out = {k: first[k] for k in ("family", "scale", "seed", "ticks")}
@@ -120,6 +120,9 @@ def summary(rows):
                     if k not in ("kind", "family", "scale", "seed", "ticks")})
         out.update({k: v for k, v in solved[0]["result"].items()
                     if k not in ("kind", "status", "solve_ns", "instrumented", "rail_metrics")})
+        if all("tick_ns_p95" in r["result"] for r in solved):
+            out["tick_ns_p95_median"] = statistics.median(r["result"]["tick_ns_p95"] for r in solved)
+            out["tick_ns_max_max"] = max(r["result"]["tick_ns_max"] for r in solved)
         if out["status"] == "simulated":
             out["completed_per_sim_minute"] = out["completed"] / out["ticks"]
             out["generated_per_wall_second"] = out["generated"] / (out["solve_ms_median"] / 1000)
@@ -167,7 +170,7 @@ def main():
         if not args.skip_build:
             subprocess.run(command, cwd=ROOT, check=True)
         binaries[mode] = target / "release" / "examples" / "benchmark"
-    files = sorted(p for glob in ("src/**/*.rs", "benchmarks/**/*.rs", "scripts/*.py", "examples/benchmark.rs", "Cargo.*") for p in ROOT.glob(glob))
+    files = sorted(p for glob in ("src/**/*.rs", "tests/**/*.rs", "benchmarks/**/*.rs", "scripts/*.py", "examples/benchmark.rs", "Cargo.*") for p in ROOT.glob(glob))
     source_hash = hashlib.sha256(b"".join(str(p.relative_to(ROOT)).encode() + b"\0" + p.read_bytes() for p in files)).hexdigest()
     metadata = {"schema": 1, "command": sys.argv, "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "platform": platform.platform(), "machine": platform.machine(), "cpu_count": os.cpu_count(),
