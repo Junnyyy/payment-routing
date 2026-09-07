@@ -290,8 +290,25 @@ impl Simulator {
     pub fn step(&mut self) -> Result<TickReport, SimulationError> {
         // Only bounded mutable state is copied. History and fixed configuration
         // are not cloned per tick. Errors discard the working transaction.
+        self.step_inner(None)
+    }
+
+    /// Same transactional tick, with bounded evidence from actual search branches.
+    /// Observation never changes events, RNG, pruning, metrics, or reservations.
+    pub fn step_observed(
+        &mut self,
+    ) -> Result<(TickReport, crate::observation::DecisionEvidence), SimulationError> {
+        let mut evidence = crate::observation::DecisionEvidence::default();
+        let report = self.step_inner(Some(&mut evidence))?;
+        Ok((report, evidence))
+    }
+
+    fn step_inner(
+        &mut self,
+        evidence: Option<&mut crate::observation::DecisionEvidence>,
+    ) -> Result<TickReport, SimulationError> {
         let mut next = self.state.clone();
-        let report = next.process_tick(&self.scenario, &self.router)?;
+        let report = next.process_tick(&self.scenario, &self.router, evidence)?;
         next.check_invariants(&self.scenario)?;
         self.state = next;
         for event in &report.events {

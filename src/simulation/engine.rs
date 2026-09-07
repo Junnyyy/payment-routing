@@ -1,5 +1,6 @@
 use super::*;
-use crate::routing::route_payment;
+use crate::observation::DecisionEvidence;
+use crate::routing::route_payment_observed;
 
 fn add(target: &mut u128, value: u128, field: &'static str) -> Result<(), SimulationError> {
     *target = target
@@ -32,6 +33,7 @@ impl State {
         &mut self,
         scenario: &Scenario,
         router: &Router,
+        mut evidence: Option<&mut DecisionEvidence>,
     ) -> Result<TickReport, SimulationError> {
         let minute = self.next_minute;
         let mut events = vec![];
@@ -72,7 +74,8 @@ impl State {
                     deadline: p.deadline,
                 })
                 .collect();
-            let (plans, diagnostics) = router.allocate(&pending, &self.reservations, limits);
+            let (plans, diagnostics) =
+                router.allocate_observed(&pending, &self.reservations, limits, &mut evidence);
             self.routing_diagnostics.plus(diagnostics);
             let mut plans = plans.into_iter();
             for mut payment in std::mem::take(&mut self.active) {
@@ -95,6 +98,13 @@ impl State {
                             route: route.clone(),
                         },
                     )?;
+                    if let (Some(evidence), Some(departures)) =
+                        (evidence.as_deref_mut(), &payment.planned_departures)
+                    {
+                        evidence
+                            .reserved_departures
+                            .insert(payment.payment.id.clone(), departures.clone());
+                    }
                     add(&mut self.metrics.accepted_routes, 1, "accepted routes")?;
                     payment.route = Some(route);
                 }
@@ -103,7 +113,7 @@ impl State {
         }
 
         for mut payment in std::mem::take(&mut self.active) {
-            if !self.drive(scenario, &mut payment, &mut events)? {
+            if !self.drive(scenario, &mut payment, &mut events, &mut evidence)? {
                 self.active.push(payment);
             }
         }
@@ -226,6 +236,7 @@ impl State {
         scenario: &Scenario,
         payment: &mut ActivePayment,
         events: &mut Vec<Event>,
+        evidence: &mut Option<&mut DecisionEvidence>,
     ) -> Result<bool, SimulationError> {
         if payment.in_flight_until.is_some() || payment.sla_failed {
             return Ok(false);
@@ -241,7 +252,9 @@ impl State {
             let mut instruction = payment.payment.clone();
             instruction.max_delivery_minutes = Some((payment.deadline - self.next_minute) as u64);
             let route = match scenario.strategy {
-                RoutingStrategy::CheapestStatic => route_payment(&view, &instruction)?,
+                RoutingStrategy::CheapestStatic => {
+                    route_payment_observed(&view, &instruction, evidence.as_deref_mut())?
+                }
                 RoutingStrategy::Reserved { .. } => unreachable!(),
             };
             let Some(route) = route else {

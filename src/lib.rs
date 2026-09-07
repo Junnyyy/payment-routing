@@ -3,6 +3,8 @@
 pub mod batch;
 pub mod demo;
 pub mod network;
+pub mod observation;
+pub mod operations;
 pub mod routing;
 pub mod scalable;
 pub mod scheduling;

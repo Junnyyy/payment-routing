@@ -1,6 +1,7 @@
 //! Exact, read-only routing through shared USD payment rails.
 
 use crate::network::{Network, Payment, ValidationError};
+use crate::observation::{DecisionEvidence, SearchEvidence, record};
 
 /// A transfer of the full payment principal between two members of a rail.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -66,6 +67,14 @@ pub fn route_payment(
     network: &Network,
     payment: &Payment,
 ) -> Result<Option<Route>, ValidationError> {
+    route_payment_observed(network, payment, None)
+}
+
+pub(crate) fn route_payment_observed(
+    network: &Network,
+    payment: &Payment,
+    mut evidence: Option<&mut DecisionEvidence>,
+) -> Result<Option<Route>, ValidationError> {
     crate::count_search!(solver_calls, 1);
     network.validate()?;
     payment.validate(network)?;
@@ -81,10 +90,12 @@ pub fn route_payment(
             total_settlement_minutes: 0,
         },
         &mut best,
+        &mut evidence,
     );
     Ok(best)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn visit<'a>(
     network: &'a Network,
     current: &'a str,
@@ -92,11 +103,17 @@ fn visit<'a>(
     visited: &mut Vec<&'a str>,
     path: &mut Route,
     best: &mut Option<Route>,
+    evidence: &mut Option<&mut DecisionEvidence>,
 ) {
     crate::count_search!(path_states, 1);
     if let Some(deadline) = payment.max_delivery_minutes
         && path.total_settlement_minutes > u128::from(deadline)
     {
+        record(evidence, &payment.id, || SearchEvidence {
+            reason: "Rejected prefix: latency exceeds remaining SLA".into(),
+            route: Some(path.clone()),
+            departures: vec![],
+        });
         crate::count_search!(deadline_prunes, 1);
         return;
     }
@@ -104,6 +121,11 @@ fn visit<'a>(
     if let Some(route) = best.as_ref()
         && path.total_fee_cents > route.total_fee_cents
     {
+        record(evidence, &payment.id, || SearchEvidence {
+            reason: "Rejected prefix: fee exceeds incumbent".into(),
+            route: Some(path.clone()),
+            departures: vec![],
+        });
         crate::count_search!(bound_prunes, 1);
         return;
     }
@@ -114,6 +136,16 @@ fn visit<'a>(
             Some(route) => path.rank() < route.rank(),
             None => true,
         };
+        record(evidence, &payment.id, || SearchEvidence {
+            reason: if improves {
+                "Candidate: improves incumbent (may later be replaced)"
+            } else {
+                "Rejected route: fee / latency / hops / lexical rank"
+            }
+            .into(),
+            route: Some(path.clone()),
+            departures: vec![],
+        });
         if improves {
             *best = Some(path.clone());
         }
@@ -121,12 +153,28 @@ fn visit<'a>(
     }
 
     for rail in &network.rails {
-        if !rail.available || !rail.participants.iter().any(|id| id == current) {
+        if !rail.participants.iter().any(|id| id == current) {
+            continue;
+        }
+        if !rail.available {
+            record(evidence, &payment.id, || SearchEvidence {
+                reason: format!(
+                    "Rejected {} from {}: closed or insufficient current capacity",
+                    rail.id, current
+                ),
+                route: None,
+                departures: vec![],
+            });
             continue;
         }
         if let Some(limit) = rail.max_amount_cents
             && payment.amount_cents > limit
         {
+            record(evidence, &payment.id, || SearchEvidence {
+                reason: format!("Rejected {}: amount exceeds transaction ceiling", rail.id),
+                route: None,
+                departures: vec![],
+            });
             continue;
         }
         for next in &rail.participants {
@@ -143,7 +191,7 @@ fn visit<'a>(
             // minutes for any addressable simple path on supported Rust targets.
             path.total_fee_cents += u128::from(rail.fee_cents);
             path.total_settlement_minutes += u128::from(rail.settlement_minutes);
-            visit(network, next, payment, visited, path, best);
+            visit(network, next, payment, visited, path, best, evidence);
             path.total_settlement_minutes -= u128::from(rail.settlement_minutes);
             path.total_fee_cents -= u128::from(rail.fee_cents);
             path.hops.pop();

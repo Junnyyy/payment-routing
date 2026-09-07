@@ -1,5 +1,6 @@
 //! Bounded, feasible routing. Failure is unresolved, never a proof of infeasibility.
 //! See `docs/scalable-routing.md`. Exact optimizers do not use this module.
+use crate::observation::{DecisionEvidence, SearchEvidence, record};
 use crate::{
     batch::RailUsage,
     network::{Network, Payment, Rail, ValidationError},
@@ -316,13 +317,15 @@ impl Router {
         }
         Some(costs)
     }
-    pub(crate) fn find(
+    #[allow(clippy::too_many_arguments)]
+    fn find_observed(
         &self,
         payment: &Payment,
         release: u128,
         deadline: u128,
         book: &Reservations,
         limits: SearchLimits,
+        evidence: &mut Option<&mut DecisionEvidence>,
     ) -> (Option<Journey>, SearchDiagnostics) {
         let source = self.nodes.binary_search(&payment.sender).unwrap();
         let target = self.nodes.binary_search(&payment.receiver).unwrap();
@@ -393,6 +396,14 @@ impl Router {
                         .batch_capacity_cents
                         .is_some_and(|c| payment.amount_cents > c)
                 {
+                    record(evidence, &payment.id, || SearchEvidence {
+                        reason: format!(
+                            "Rejected {}: unavailable or amount ceiling/budget",
+                            rail.id
+                        ),
+                        route: None,
+                        departures: vec![],
+                    });
                     continue;
                 }
                 let mut choices = vec![];
@@ -452,6 +463,14 @@ impl Router {
                                 break;
                             };
                             if arrival > deadline {
+                                record(evidence, &payment.id, || SearchEvidence {
+                                    reason: format!(
+                                        "Rejected {} from {}: earliest arrival {} > deadline {}",
+                                        rail.id, self.nodes[label.node], arrival, deadline
+                                    ),
+                                    route: None,
+                                    departures: vec![],
+                                });
                                 break;
                             }
                             let s = Slot {
@@ -464,6 +483,14 @@ impl Router {
                                 choices.push(s);
                                 break;
                             }
+                            record(evidence, &payment.id, || SearchEvidence {
+                                reason: format!(
+                                    "Rejected {}@{}: reserved capacity conflict",
+                                    rail.id, departure
+                                ),
+                                route: None,
+                                departures: vec![],
+                            });
                             let Some(next) = departure.checked_add(1) else {
                                 break;
                             };
@@ -499,6 +526,18 @@ impl Router {
                             fee: slot.fee,
                         });
                         if next == target {
+                            record(evidence, &payment.id, || SearchEvidence {
+                                reason:
+                                    "Candidate in order/repair search; final allocation may differ"
+                                        .into(),
+                                route: Some(self.route(&candidate.journey)),
+                                departures: candidate
+                                    .journey
+                                    .steps
+                                    .iter()
+                                    .map(|s| s.departure)
+                                    .collect(),
+                            });
                             if best
                                 .as_ref()
                                 .is_none_or(|b| candidate.journey.rank() < b.rank())
@@ -550,6 +589,21 @@ impl Router {
         }
         stats.truncated_searches = u128::from(truncated);
         stats.unresolved = u128::from(best.is_none());
+        if best.is_none() || truncated {
+            record(evidence, &payment.id, || SearchEvidence {
+                reason: format!(
+                    "Search result: {}; truncated {}",
+                    if best.is_none() {
+                        "unresolved"
+                    } else {
+                        "plan found"
+                    },
+                    truncated
+                ),
+                route: None,
+                departures: vec![],
+            });
+        }
         (best, stats)
     }
     pub(crate) fn reserve(&self, book: &mut Reservations, journey: &Journey, amount: u64) {
@@ -694,6 +748,16 @@ impl Router {
         initial: &Reservations,
         limits: SearchLimits,
     ) -> (Vec<Option<Journey>>, SearchDiagnostics) {
+        self.allocate_observed(requests, initial, limits, &mut None)
+    }
+
+    pub(crate) fn allocate_observed(
+        &self,
+        requests: &[Request<'_>],
+        initial: &Reservations,
+        limits: SearchLimits,
+        evidence: &mut Option<&mut DecisionEvidence>,
+    ) -> (Vec<Option<Journey>>, SearchDiagnostics) {
         let base: Vec<_> = (0..requests.len()).collect();
         let mut orders = vec![base.clone()];
         let mut deadline = base.clone();
@@ -739,7 +803,8 @@ impl Router {
             let mut plans = vec![None; requests.len()];
             for i in order {
                 let r = &requests[i];
-                let (journey, stats) = self.find(r.payment, r.release, r.deadline, &book, limits);
+                let (journey, stats) =
+                    self.find_observed(r.payment, r.release, r.deadline, &book, limits, evidence);
                 diagnostics.plus(stats);
                 if let Some(ref j) = journey {
                     self.reserve(&mut book, j, r.payment.amount_cents);
@@ -788,8 +853,9 @@ impl Router {
                         candidate[j] = None;
                         for k in order {
                             let r = &requests[k];
-                            let (journey, stats) =
-                                self.find(r.payment, r.release, r.deadline, &book, limits);
+                            let (journey, stats) = self.find_observed(
+                                r.payment, r.release, r.deadline, &book, limits, evidence,
+                            );
                             diagnostics.plus(stats);
                             if let Some(ref journey) = journey {
                                 self.reserve(&mut book, journey, r.payment.amount_cents);
@@ -822,7 +888,8 @@ impl Router {
                     }
                 }
                 let r = &requests[i];
-                let (journey, stats) = self.find(r.payment, r.release, r.deadline, &book, limits);
+                let (journey, stats) =
+                    self.find_observed(r.payment, r.release, r.deadline, &book, limits, evidence);
                 diagnostics.plus(stats);
                 let mut candidate = best.clone();
                 candidate[i] = journey;
