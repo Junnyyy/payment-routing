@@ -135,6 +135,9 @@ pub struct Dossier {
     pub deadline: u128,
     pub status: PaymentStatus,
     pub route: Option<Route>,
+    pub actual_fee_cents: u128,
+    pub departed_hops: usize,
+    pub completed_elapsed_minutes: Option<u128>,
     pub decision_minute: Option<u128>,
     pub evidence: PaymentEvidence,
     pub planned_departures: Option<Vec<u128>>,
@@ -184,6 +187,9 @@ impl ObservedRun {
                             deadline: *deadline,
                             status: PaymentStatus::Queued,
                             route: None,
+                            actual_fee_cents: 0,
+                            departed_hops: 0,
+                            completed_elapsed_minutes: None,
                             decision_minute: None,
                             evidence: Default::default(),
                             planned_departures: None,
@@ -212,7 +218,16 @@ impl ObservedRun {
                 }
                 EventKind::Rejected { .. } => p.status = PaymentStatus::Rejected,
                 EventKind::Expired { .. } => p.status = PaymentStatus::Expired,
-                EventKind::Completed { late, .. } => {
+                EventKind::HopDeparted { fee_cents, .. } => {
+                    p.actual_fee_cents += u128::from(*fee_cents);
+                    p.departed_hops += 1;
+                }
+                EventKind::Completed {
+                    late,
+                    elapsed_minutes,
+                    ..
+                } => {
+                    p.completed_elapsed_minutes = Some(*elapsed_minutes);
                     p.status = if *late {
                         PaymentStatus::Late
                     } else {

@@ -79,6 +79,8 @@ pub struct App {
     pub editing: Option<String>,
     pub selected_payment: Option<u128>,
     pub detail: Option<Dossier>,
+    pub rail_detail: bool,
+    pub follow_latest: bool,
     pub detail_scroll: u16,
     pub help: bool,
     pub help_scroll: u16,
@@ -105,6 +107,8 @@ impl App {
             editing: None,
             selected_payment: None,
             detail: None,
+            rail_detail: false,
+            follow_latest: true,
             detail_scroll: 0,
             help: false,
             help_scroll: 0,
@@ -161,6 +165,7 @@ impl App {
         let ids = self.payment_ids();
         let selected = self
             .selected_payment
+            .filter(|_| !self.follow_latest)
             .and_then(|id| ids.iter().position(|&i| i == id))
             .or(if ids.is_empty() { None } else { Some(0) });
         self.tables[View::Payments as usize].select(selected);
@@ -186,6 +191,11 @@ impl App {
             self.running = false;
         }
         self.last_step = start.elapsed();
+        if self.error.is_none() {
+            self.notice =
+                "Both strategies share demand. Enter pauses to inspect; Home follows newest."
+                    .into();
+        }
         self.sync_selection();
         if let Some(detail) = &self.detail {
             self.detail = self
@@ -203,6 +213,8 @@ impl App {
                 self.ops = ops;
                 self.error = None;
                 self.detail = None;
+                self.rail_detail = false;
+                self.follow_latest = true;
                 self.selected_payment = None;
                 self.tables = Default::default();
                 self.scroll = [0; 6];
@@ -261,8 +273,9 @@ impl App {
         if key.code == KeyCode::Esc {
             if self.help {
                 self.help = false;
-            } else if self.detail.is_some() {
+            } else if self.detail.is_some() || self.rail_detail {
                 self.detail = None;
+                self.rail_detail = false;
             } else {
                 return true;
             }
@@ -292,7 +305,9 @@ impl App {
             return false;
         }
         match key.code {
-            KeyCode::Char(' ') if self.detail.is_none() && self.error.is_none() => {
+            KeyCode::Char(' ')
+                if self.detail.is_none() && !self.rail_detail && self.error.is_none() =>
+            {
                 self.running = !self.running
             }
             KeyCode::Char('.') => {
@@ -310,21 +325,28 @@ impl App {
                 Preset::ALL[(self.ops.preset as usize + 1) % Preset::ALL.len()],
             ),
             KeyCode::Char('s') => {
+                self.rail_detail = false;
                 self.strategy = 1 - self.strategy;
                 self.detail = None;
                 self.sync_selection();
             }
             KeyCode::Char('/') => {
+                self.rail_detail = false;
                 self.view = View::Payments;
                 self.detail = None;
                 self.running = false;
                 self.editing = Some(self.query.clone());
             }
-            KeyCode::Char('f') if self.detail.is_none() => {
+            KeyCode::Char('f') if self.detail.is_none() && !self.rail_detail => {
                 self.view = View::Payments;
                 self.filter = Filter::ALL[(self.filter as usize + 1) % Filter::ALL.len()];
                 self.selected_payment = None;
                 self.sync_selection();
+            }
+            KeyCode::Enter if self.view == View::Rails && !self.rail_detail => {
+                self.rail_detail = true;
+                self.detail_scroll = 0;
+                self.running = false;
             }
             KeyCode::Enter if self.view == View::Payments && self.detail.is_none() => {
                 self.sync_selection();
@@ -341,7 +363,7 @@ impl App {
             | KeyCode::PageUp
             | KeyCode::Home
             | KeyCode::End => self.move_row(key.code),
-            _ if self.detail.is_none() => {
+            _ if self.detail.is_none() && !self.rail_detail => {
                 match key.code {
                     KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
                         self.view = View::ALL[(self.view as usize + 1) % 6]
@@ -367,8 +389,8 @@ impl App {
         } else {
             1
         };
-        if self.detail.is_some() || self.row_count(self.view) == 0 {
-            let offset = if self.detail.is_some() {
+        if self.detail.is_some() || self.rail_detail || self.row_count(self.view) == 0 {
+            let offset = if self.detail.is_some() || self.rail_detail {
                 &mut self.detail_scroll
             } else {
                 &mut self.scroll[self.view as usize]
@@ -392,6 +414,7 @@ impl App {
         };
         state.select(Some(next));
         if self.view == View::Payments {
+            self.follow_latest = key == KeyCode::Home;
             self.selected_payment = self.payment_ids().get(next).copied();
         }
     }

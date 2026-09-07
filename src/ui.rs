@@ -13,7 +13,7 @@ use ratatui::{
 };
 
 const ACCENT: Color = Color::Cyan;
-const HELP: &str = "SIMULATION\nSpace start/pause   . one tick and pause   +/- speed (ticks/second)\nr restart current seed   n next seed (seed + 1, wrapping at u64 max)\nc cycle scenario and reset: balanced / pressure / outage / limited\ns inspect other strategy; both advance together on identical demand\n\nNAVIGATION\n1 overview  2 payments  3 rails  4 network  5 optimizer  6 compare\nTab / Shift-Tab or h/l / arrows change view\nj/k / arrows select or scroll; PgUp/PgDn page; Home/End first/last\nf cycle payment filter; / search ID, endpoints, status or route rail\nEnter opens payment and pauses; Esc closes detail/help, otherwise quits\n? help and pause; q / Ctrl-C quit; Esc cancels a search\n\nREADING THE CONSOLE\nMinute is the last completed tick; next is the next minute to execute.\nCapacity is shared principal per departure minute, never in-flight load.\nFees are actual departures, including failed work; planned fees are separate.\nSLA failure = overload rejection or deadline miss, counted once.\nQueued samples exclude in-flight work; zero queue does not mean zero failures.\nSearch evidence contains candidates and rejected prefixes from actual trials.\nReserved unresolved/truncated searches do not prove infeasibility.\nAll active + newest 128 terminal dossiers; 32 events and 24 evidence entries.\nComparison cohorts may differ; fees are not a certified optimality gap.\n\nSynthetic USD, accelerated timing. Opening balances are descriptive.\nNo live payments, liquidity constraints, netting or actual settlement.";
+const HELP: &str = "SIMULATION\nSpace start/pause   . one tick and pause   +/- speed (ticks/second)\nr restart current seed   n next seed (seed + 1, wrapping at u64 max)\nc cycle scenario and reset: balanced / pressure / outage / limited\ns inspect other strategy; both advance together on identical demand\n\nNAVIGATION\n1 overview  2 payments  3 rails  4 network  5 optimizer  6 compare\nTab / Shift-Tab or h/l / arrows change view\nj/k / arrows select or scroll; PgUp/PgDn page; Home follows newest payment\nf cycle payment filter; / search ID, endpoints, status or route rail\nEnter inspects payment or rail and pauses; Esc closes detail/help or quits\n? help and pause; q / Ctrl-C quit; Esc cancels a search\n\nREADING THE CONSOLE\nMinute is the last completed tick; next is the next minute to execute.\nCapacity is shared principal per departure minute, never in-flight load.\nFees are actual departures, including failed work; planned fees are separate.\nSLA failure = overload rejection or deadline miss, counted once.\nQueued samples exclude in-flight work; zero queue does not mean zero failures.\nSearch evidence contains candidates and rejected prefixes from actual trials.\nReserved unresolved/truncated searches do not prove infeasibility.\nAll active + newest 128 terminal dossiers; 32 events and 24 evidence entries.\nComparison cohorts may differ; fees are not a certified optimality gap.\n\nSynthetic USD, accelerated timing. Opening balances are descriptive.\nNo live payments, liquidity constraints, netting or actual settlement.";
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
@@ -87,6 +87,15 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             HELP.lines().map(str::to_string).collect(),
             &mut app.help_scroll,
         );
+    } else if app.rail_detail {
+        let lines = rail_detail_lines(app);
+        text_page(
+            frame,
+            body,
+            "Rail investigation / Esc back",
+            lines,
+            &mut app.detail_scroll,
+        );
     } else if let Some(detail) = &app.detail {
         let lines = detail_lines(app, detail);
         text_page(
@@ -137,6 +146,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         format!("Search: {input}_  [Enter apply / Esc cancel]")
     } else if let Some(error) = &app.error {
         format!("ERROR: {error} [paused; r resets]")
+    } else if app.rail_detail {
+        "Rail utilization + future slots; j/k/PgDn scroll, Home/End; Esc back".into()
     } else if app.detail.is_some() {
         "Selected route + actual search evidence; j/k/PgDn scroll, Home/End; Esc back".into()
     } else {
@@ -358,8 +369,8 @@ fn payments(frame: &mut Frame, area: Rect, app: &mut App) {
                 .unwrap_or_else(|| "--".into());
             Row::new(vec![
                 p.payment.id.clone(),
-                format!(">{}", p.payment.receiver),
                 p.payment.sender.clone(),
+                p.payment.receiver.clone(),
                 money(p.payment.amount_cents as u128),
                 p.status.label().into(),
                 p.deadline.to_string(),
@@ -370,12 +381,17 @@ fn payments(frame: &mut Frame, area: Rect, app: &mut App) {
         .collect();
     let selected = app.tables[1].selected().map_or(0, |i| i + 1);
     let title = format!(
-        "Payments {} / {} ({}/{}) | /{} | Enter inspect",
+        "Payments {} / {} ({}/{}) | /{} | {}",
         app.filter.label(),
         ids.len(),
         selected,
         ids.len(),
-        app.query
+        app.query,
+        if app.follow_latest {
+            "FOLLOW newest"
+        } else {
+            "HOLD ID; Home follows"
+        }
     );
     if ids.is_empty() {
         frame.render_widget(Paragraph::new("No matching payments. Space or . generates demand.\nf cycles filters; / then Enter clears search.\nAll active + newest 128 terminal payments are retained.").block(Block::bordered().title(title)), area);
@@ -385,7 +401,7 @@ fn payments(frame: &mut Frame, area: Rect, app: &mut App) {
         frame,
         area,
         title,
-        vec!["ID", "To", "From", "USD", "State", "Due", "Route"],
+        vec!["ID", "From", "To", "USD", "State", "Due", "Route"],
         vec![
             Constraint::Length(10),
             Constraint::Length(5),
@@ -462,9 +478,8 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
         .collect::<Vec<_>>()
         .join(" ");
     let text = format!(
-        "{} ({}) | members {} | fee ${} | latency {}m\nWindow +{} open {}/{}m enabled {} | hop USD out {} settled {} flight {}\nFuture reserved: {}",
+        "{} | {} | fee ${} | transit {}m\nWindow +{} open {}/{}m | enabled {} | in-flight USD {}\nReserved: {}  [Enter: all utilization / future slots]",
         r.id,
-        r.name,
         r.participants.join(" "),
         money(r.fee_cents as u128),
         r.settlement_minutes,
@@ -472,8 +487,6 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
         s.open_minutes,
         s.period_minutes,
         r.available,
-        money(state.departed_principal_cents),
-        money(state.settled_principal_cents),
         money(state.departed_principal_cents - state.settled_principal_cents),
         if reserved.is_empty() {
             "none"
@@ -486,7 +499,7 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
         grid,
         "Rails / last processed minute principal budget / j k select".into(),
         vec![
-            "Rail", "State", "Used USD", "Cap USD", "Use %", "Wait", "Hops", "Fee USD",
+            "Rail", "Now", "Used USD", "Cap USD", "Use %", "Wait", "Hops", "Fee USD",
         ],
         vec![
             Constraint::Length(7),
@@ -506,6 +519,103 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
             .block(Block::bordered().title("Selected rail / reservations are future departures")),
         detail,
     );
+}
+fn rail_detail_lines(app: &App) -> Vec<String> {
+    let sim = &app.run().simulator;
+    let i = app.tables[2].selected().unwrap_or(0);
+    let r = &sim.scenario().network.rails[i];
+    let s = &sim.scenario().services[i];
+    let state = &sim.rail_states()[i];
+    let mut slots: BTreeSlots = Default::default();
+    let mut waits = vec![];
+    for p in sim.active_payments() {
+        if let Some(route) = &p.route {
+            if p.in_flight_until.is_none() && route.hops[p.next_hop].rail_id == r.id {
+                waits.push(format!(
+                    "{} {} -> {} USD {} due {}",
+                    p.payment.id,
+                    route.hops[p.next_hop].sender,
+                    route.hops[p.next_hop].receiver,
+                    money(p.payment.amount_cents as u128),
+                    p.deadline
+                ));
+            }
+            if let Some(times) = &p.planned_departures {
+                for (hop, t) in route.hops.iter().zip(times) {
+                    if hop.rail_id == r.id && *t >= sim.next_minute() {
+                        *slots.entry(*t).or_default() += p.payment.amount_cents as u128;
+                    }
+                }
+            }
+        }
+    }
+    let mut lines = vec![
+        format!(
+            "{} / {} | members {}",
+            r.id,
+            r.name,
+            r.participants.join(" ")
+        ),
+        format!(
+            "Enabled {} | fee USD {} | transit {}m | transaction ceiling {}",
+            r.available,
+            money(r.fee_cents as u128),
+            r.settlement_minutes,
+            r.max_amount_cents
+                .map_or("none".into(), |c| money(c as u128))
+        ),
+        format!(
+            "Service: offset {} / open {} / period {} minutes",
+            s.offset_minutes, s.open_minutes, s.period_minutes
+        ),
+        format!(
+            "Fresh principal budget per open minute: USD {}",
+            s.capacity_per_minute_cents
+                .map_or("unlimited".into(), |c| money(c as u128))
+        ),
+        format!(
+            "Last tick open {} / used USD {}",
+            state.open,
+            money(state.used_this_minute_cents)
+        ),
+        format!(
+            "CUMULATIVE hop principal departed USD {} / settled USD {}",
+            money(state.departed_principal_cents),
+            money(state.settled_principal_cents)
+        ),
+        format!(
+            "IN FLIGHT principal USD {} / hops {}",
+            money(state.departed_principal_cents - state.settled_principal_cents),
+            state.departed_hops - state.settled_hops
+        ),
+        format!(
+            "Actual fee USD {} / departed hops {} / settled hops {}",
+            money(state.routing_cost_cents),
+            state.departed_hops,
+            state.settled_hops
+        ),
+        "Capacity usage is departure principal, not in-flight occupancy.".into(),
+        "FUTURE RESERVATIONS (all active witnesses, aggregate per minute)".into(),
+    ];
+    if slots.is_empty() {
+        lines.push("None. Static strategy makes no reservations.".into());
+    }
+    for (minute, amount) in slots {
+        lines.push(format!(
+            "@{} USD {} / budget {}",
+            minute,
+            money(amount),
+            s.capacity_per_minute_cents
+                .map_or("unlimited".into(), |c| money(c as u128))
+        ));
+    }
+    lines.push("WAITING FOR THIS RAIL (unrouted demand is not assigned to any rail)".into());
+    if waits.is_empty() {
+        lines.push("None".into());
+    } else {
+        lines.extend(waits);
+    }
+    lines
 }
 type BTreeSlots = std::collections::BTreeMap<u128, u128>;
 fn network(frame: &mut Frame, area: Rect, app: &mut App) {
@@ -686,35 +796,19 @@ fn compare(app: &App) -> Vec<String> {
     ];
     for (label, left, right) in [
         (
-            "Generated",
-            x.generated.to_string(),
-            y.generated.to_string(),
+            "Generated / active",
+            format!("{} / {}", x.generated, a.active_payments().len()),
+            format!("{} / {}", y.generated, b.active_payments().len()),
         ),
         (
-            "Completed",
-            x.completed.to_string(),
-            y.completed.to_string(),
+            "Completed / late",
+            format!("{} / {}", x.completed, x.completed_late),
+            format!("{} / {}", y.completed, y.completed_late),
         ),
         (
-            "On-time completed",
-            (x.completed - x.completed_late).to_string(),
-            (y.completed - y.completed_late).to_string(),
-        ),
-        (
-            "Late completions",
-            x.completed_late.to_string(),
-            y.completed_late.to_string(),
-        ),
-        ("Expired", x.expired.to_string(), y.expired.to_string()),
-        (
-            "Overload rejections",
-            x.rejected.to_string(),
-            y.rejected.to_string(),
-        ),
-        (
-            "Active",
-            a.active_payments().len().to_string(),
-            b.active_payments().len().to_string(),
+            "Expired / overload",
+            format!("{} / {}", x.expired, x.rejected),
+            format!("{} / {}", y.expired, y.rejected),
         ),
         (
             "SLA failures / generated",
@@ -740,7 +834,7 @@ fn compare(app: &App) -> Vec<String> {
         lines.push(format!("{label:<27} {left:>15} {right:>20}"));
     }
     lines.extend([
-        String::new(),
+        "Cohorts differ: fees are not a certified optimality gap.".into(),
         "Identical generated demand; completion cohorts and active work can differ.".into(),
         "Lower fees alone do not imply better routing. No global optimality gap.".into(),
         "s switches the inspected strategy without resetting either run.".into(),
@@ -792,6 +886,13 @@ fn detail_lines(app: &App, p: &Dossier) -> Vec<String> {
                 .unwrap_or_else(|| "no accepted route".into())
         ));
     }
+    lines.push(format!(
+        "Executed fee USD {} / {} departures | completed elapsed {}m",
+        money(p.actual_fee_cents),
+        p.departed_hops,
+        p.completed_elapsed_minutes
+            .map_or("--".into(), |v| v.to_string())
+    ));
     lines.push("SELECTED ROUTE (accepted plan; fees accrue only on actual departure)".into());
     if let Some(route) = &p.route {
         lines.push(format!(
@@ -1009,7 +1110,7 @@ mod tests {
                     }
                     if view == View::Rails {
                         assert!(output.contains("FEDWIRE"));
-                        assert!(output.contains("Future reserved:"));
+                        assert!(output.contains("Reserved:"));
                     }
                     if view == View::Compare {
                         assert!(output.contains("STATIC"));
@@ -1042,6 +1143,7 @@ mod tests {
             .unwrap()
             .sequence;
         app.selected_payment = Some(id);
+        app.follow_latest = false;
         app.sync_selection();
         key(&mut app, KeyCode::Enter);
         let top = screen(&mut app, 80, 18, "detail-top");
@@ -1065,6 +1167,107 @@ mod tests {
         screen(&mut app, 80, 18, "payments-home");
         assert_eq!(app.tables[1].offset(), 0);
     }
+    #[test]
+    fn in_flight_sla_failure_is_visible_with_zero_queue_and_late_fees() {
+        use payment_routing::{
+            network::{Institution, Network, Rail},
+            simulation::{
+                ArrivalProcess, PaymentFlow, RailService, RoutingStrategy, Scenario, Simulator,
+            },
+        };
+        let network = Network {
+            name: "drain".into(),
+            institutions: ["A", "B", "C"]
+                .map(|id| Institution {
+                    id: id.into(),
+                    name: id.into(),
+                    opening_balance_cents: 0,
+                })
+                .to_vec(),
+            rails: [
+                Rail {
+                    id: "AB".into(),
+                    name: "AB".into(),
+                    participants: vec!["A".into(), "B".into()],
+                    fee_cents: 1,
+                    settlement_minutes: 1,
+                    available: true,
+                    max_amount_cents: None,
+                    batch_capacity_cents: None,
+                },
+                Rail {
+                    id: "BC".into(),
+                    name: "BC".into(),
+                    participants: vec!["B".into(), "C".into()],
+                    fee_cents: 1,
+                    settlement_minutes: 2,
+                    available: true,
+                    max_amount_cents: None,
+                    batch_capacity_cents: None,
+                },
+            ]
+            .to_vec(),
+            payments: vec![],
+        };
+        let scenario = Scenario {
+            network,
+            arrivals: ArrivalProcess {
+                attempts_per_minute: 1,
+                probability_per_million: 500_000,
+                flows: vec![PaymentFlow {
+                    sender: "A".into(),
+                    receiver: "C".into(),
+                }],
+                min_amount_cents: 1,
+                max_amount_cents: 1,
+                min_sla_minutes: 3,
+                max_sla_minutes: 3,
+            },
+            services: vec![
+                RailService {
+                    rail_id: "AB".into(),
+                    period_minutes: 1,
+                    offset_minutes: 0,
+                    open_minutes: 1,
+                    capacity_per_minute_cents: None,
+                },
+                RailService {
+                    rail_id: "BC".into(),
+                    period_minutes: 2,
+                    offset_minutes: 0,
+                    open_minutes: 1,
+                    capacity_per_minute_cents: None,
+                },
+            ],
+            strategy: RoutingStrategy::CheapestStatic,
+            max_active_payments: 16,
+            retained_events: 32,
+        };
+        let mut app = App::new(Preset::Balanced, 42).unwrap();
+        for run in &mut app.ops.runs {
+            run.simulator = Simulator::new(scenario.clone(), 6).unwrap();
+        }
+        app.strategy = 0;
+        for _ in 0..4 {
+            app.step();
+        }
+        assert_eq!(app.run().payments[&1].status, PaymentStatus::Draining);
+        let output = screen(&mut app, 80, 18, "in-flight-sla");
+        assert!(output.contains("draining 1"));
+        assert!(output.contains("unrouted 0 | wait slot 0 | in flight 1"));
+        assert_eq!(app.run().simulator.metrics().generated, 1);
+        app.view = View::Payments;
+        app.query = "SIM-1".into();
+        assert!(screen(&mut app, 80, 18, "draining-payment").contains("DRAIN SLA"));
+        app.step();
+        let p = &app.run().payments[&1];
+        assert_eq!(p.status, PaymentStatus::Late);
+        assert_eq!(p.actual_fee_cents, 2);
+        assert_eq!(p.completed_elapsed_minutes, Some(4));
+        key(&mut app, KeyCode::Enter);
+        assert!(screen(&mut app, 80, 18, "late-payment").contains("Executed fee USD 0.02"));
+    }
+
     #[test]
     fn empty_filtered_small_help_and_zero_denominators_are_readable() {
         let mut app = App::new(Preset::Balanced, 42).unwrap();
