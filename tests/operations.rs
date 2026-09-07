@@ -116,3 +116,73 @@ fn evidence_includes_real_rejected_alternatives_and_selected_witnesses() {
         );
     }
 }
+
+#[path = "support/simulation_fixture.rs"]
+mod simulation_fixture;
+
+#[test]
+fn reserved_dossiers_keep_same_tick_and_future_departures_for_every_hop() {
+    use payment_routing::operations::PaymentStatus;
+    use simulation_fixture::{rail, scenario};
+
+    for multihop in [false, true] {
+        let rails = if multihop {
+            vec![rail("AB", &["A", "B"], 1, 0), rail("BC", &["B", "C"], 1, 0)]
+        } else {
+            vec![rail("AB", &["A", "B"], 1, 0)]
+        };
+        let mut config = scenario(rails);
+        config.arrivals.flows[0].receiver = if multihop { "C" } else { "B" }.into();
+        config.arrivals.attempts_per_minute = 2;
+        for service in &mut config.services {
+            service.capacity_per_minute_cents = Some(100);
+        }
+        let mut ops = Operations::new(Preset::Balanced, 42).unwrap();
+        for (i, run) in ops.runs.iter_mut().enumerate() {
+            config.strategy = if i == 0 {
+                RoutingStrategy::CheapestStatic
+            } else {
+                RoutingStrategy::Reserved {
+                    limits: Default::default(),
+                }
+            };
+            run.simulator = Simulator::new(config.clone(), 42).unwrap();
+        }
+        let initial = ops.clone();
+        let hops = if multihop { 2 } else { 1 };
+        ops.step().unwrap();
+        let instant = &ops.runs[1].payments[&1];
+        assert_eq!(instant.status, PaymentStatus::Completed);
+        assert_eq!(instant.route.as_ref().unwrap().hops.len(), hops);
+        assert_eq!(
+            instant.planned_departures,
+            Some(vec![0; hops]),
+            "same-tick completion lost its accepted reservation plan"
+        );
+        assert!(
+            !ops.runs[1]
+                .simulator
+                .active_payments()
+                .iter()
+                .any(|p| p.sequence == 1)
+        );
+        let future = &ops.runs[1].payments[&2];
+        assert_eq!(future.status, PaymentStatus::Waiting);
+        assert_eq!(future.planned_departures, Some(vec![1; hops]));
+        assert_eq!(
+            ops.runs[0].payments[&1].planned_departures, None,
+            "static execution never reserves"
+        );
+        ops.step().unwrap();
+        assert_eq!(ops.runs[1].payments[&2].status, PaymentStatus::Completed);
+        assert_eq!(
+            ops.runs[1].payments[&2].planned_departures,
+            Some(vec![1; hops])
+        );
+        let final_state = ops;
+        let mut replay = initial;
+        replay.step().unwrap();
+        replay.step().unwrap();
+        assert_eq!(replay, final_state);
+    }
+}

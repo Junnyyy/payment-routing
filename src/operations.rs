@@ -243,6 +243,9 @@ impl ObservedRun {
             p.events.push_back(event);
         }
         for p in self.payments.values_mut() {
+            if let Some(departures) = evidence.reserved_departures.remove(&p.payment.id) {
+                p.planned_departures = Some(departures);
+            }
             if let Some(trace) = evidence.payments.remove(&p.payment.id) {
                 p.evidence = trace;
                 p.decision_minute = Some(report.minute);
@@ -254,7 +257,6 @@ impl ObservedRun {
                 .payments
                 .get_mut(&active.sequence)
                 .expect("active dossier retained");
-            p.planned_departures.clone_from(&active.planned_departures);
             p.status = if active.sla_failed {
                 PaymentStatus::Draining
             } else if active.in_flight_until.is_some() {

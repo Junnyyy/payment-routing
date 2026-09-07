@@ -1168,6 +1168,21 @@ mod tests {
         assert_eq!(app.tables[1].offset(), 0);
     }
     #[test]
+    fn same_tick_completed_payment_shows_its_reserved_departure() {
+        let mut app = App::new(Preset::Balanced, 42).unwrap();
+        app.step();
+        let dossier = &app.run().payments[&1];
+        assert_eq!(dossier.status, PaymentStatus::Completed);
+        assert_eq!(dossier.completed_elapsed_minutes, Some(0));
+        app.detail = Some(dossier.clone());
+        let output = screen(&mut app, 80, 18, "same-tick-reservation");
+        assert!(
+            output.contains("reserved @0"),
+            "accepted plan missing from investigation: {output}"
+        );
+    }
+
+    #[test]
     fn in_flight_sla_failure_is_visible_with_zero_queue_and_late_fees() {
         use payment_routing::{
             network::{Institution, Network, Rail},

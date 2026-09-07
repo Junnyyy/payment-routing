@@ -52,8 +52,9 @@ terminal modes; simulation errors pause and retain the last committed twin state
   rows change; Home resumes following newest. Filters apply to retained records.
   A selected record that ages out of retention falls back to the newest match.
   Enter shows endpoints, deadline, status, the other strategy's retained result,
-  actual fees and elapsed completion time, accepted route, future reserved
-  departures where retained, search evidence, and a bounded lifecycle.
+  actual fees and elapsed completion time, accepted route and reserved departure
+  timestamps (including same-tick completions), search evidence, and a bounded
+  lifecycle.
 - **Rails:** last-tick open state, used principal/capacity, utilization, assigned
   waiting payments, cumulative departures and fees. Enter exposes full membership,
   service windows, cumulative departed/settled/in-flight principal and hops, all
@@ -87,6 +88,9 @@ A candidate may later be replaced; a prefix is not a complete route; an alternat
 trial may use different tentative reservations. No exhaustive rejected-alternative
 list or global feasibility certificate is implied. A bounded failure is unresolved,
 never proven infeasible. The final accepted route is displayed separately.
+Accepted reserved departure timestamps are captured before execution in a separate
+observation map, independent of the search-entry cap, so zero-latency completion
+cannot remove the plan from the retained dossier. Ordinary tick events are unchanged.
 
 Evidence is opt-in; `step()` and exact optimizers preserve their existing outputs.
 Each observed tick collects at most 24 entries per payment and counts omitted

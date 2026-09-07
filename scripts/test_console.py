@@ -156,6 +156,11 @@ def main():
     try:
         session.send(b".")
         session.until(lambda s: "minute 0 next 1" in s)
+        session.send(b"2/SIM-1\r\r")
+        session.until(lambda s: "payment investigation" in s and "reserved @0" in s)
+        session.snapshot("same-tick-reservation")
+        session.send(b"\x1b")
+        session.send(b"/\x7f\x7f\x7f\x7f\x7f\r1")
         session.send(b"+++")
         session.until(lambda s: "100 tick/s" in s)
         session.send(b" ")

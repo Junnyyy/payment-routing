@@ -23,6 +23,10 @@ pub struct PaymentEvidence {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DecisionEvidence {
     pub payments: BTreeMap<String, PaymentEvidence>,
+    /// Final accepted reserved plans, keyed by payment ID and aligned with route
+    /// hops. Separate from capped search candidates and captured before execution
+    /// can complete/remove a payment in its acceptance tick.
+    pub reserved_departures: BTreeMap<String, Vec<u128>>,
 }
 
 pub(crate) fn record(

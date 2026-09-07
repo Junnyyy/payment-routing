@@ -98,6 +98,13 @@ impl State {
                             route: route.clone(),
                         },
                     )?;
+                    if let (Some(evidence), Some(departures)) =
+                        (evidence.as_deref_mut(), &payment.planned_departures)
+                    {
+                        evidence
+                            .reserved_departures
+                            .insert(payment.payment.id.clone(), departures.clone());
+                    }
                     add(&mut self.metrics.accepted_routes, 1, "accepted routes")?;
                     payment.route = Some(route);
                 }
