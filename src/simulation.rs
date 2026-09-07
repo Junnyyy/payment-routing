@@ -1,10 +1,13 @@
 //! Continuous deterministic synthetic execution. See `docs/simulation.md`.
 
 mod config;
+mod disruption;
 mod engine;
+mod replan;
 mod rng;
 
 pub use config::{ArrivalProcess, PaymentFlow, RailService, RoutingStrategy, Scenario};
+pub use disruption::*;
 
 use std::{collections::VecDeque, error::Error, fmt};
 
@@ -81,6 +84,21 @@ pub struct ActivePayment {
     pub planned_departures: Option<Vec<u128>>,
     pub in_flight_until: Option<u128>,
     pub sla_failed: bool,
+    /// Initial route acceptance is counted once, even after a withdrawal/retry.
+    pub ever_routed: bool,
+}
+
+impl ActivePayment {
+    pub fn has_complete_plan(&self) -> bool {
+        self.route.as_ref().is_some_and(|r| {
+            r.hops
+                .last()
+                .is_some_and(|h| h.receiver == self.payment.receiver)
+        })
+    }
+    pub(super) fn fixed_hops(&self) -> usize {
+        self.next_hop + usize::from(self.in_flight_until.is_some())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +116,15 @@ pub struct RailState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventKind {
+    DisruptionApplied(AppliedDisruption),
+    Reoptimized(Box<ReoptimizationReport>),
+    /// Full witness includes the unchanged executed/in-flight prefix. A route
+    /// ending short of the receiver is a fixed prefix awaiting a new suffix.
+    PlanRevised {
+        sequence: u128,
+        route: Option<Route>,
+        planned_departures: Option<Vec<u128>>,
+    },
     RailTick {
         rail_id: String,
         open: bool,
@@ -165,6 +192,8 @@ struct State {
     rails: Vec<RailState>,
     reservations: Reservations,
     routing_diagnostics: SearchDiagnostics,
+    adaptation_metrics: AdaptationMetrics,
+    last_reoptimization: Option<ReoptimizationReport>,
 }
 
 /// A bounded-state deterministic model. Pacing belongs to the caller.
@@ -172,7 +201,11 @@ struct State {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Simulator {
     scenario: Scenario,
+    effective: Scenario,
     router: Router,
+    next_disruption: usize,
+    pending_updates: std::collections::BTreeMap<String, RailUpdate>,
+    reoptimization_policy: ReoptimizationPolicy,
     seed: u64,
     running: bool,
     state: State,
@@ -190,11 +223,18 @@ impl Simulator {
         scenario
             .services
             .sort_unstable_by(|a, b| a.rail_id.cmp(&b.rail_id));
+        scenario
+            .disruptions
+            .sort_by(|a, b| (a.minute, &a.update.rail_id).cmp(&(b.minute, &b.update.rail_id)));
         let state = Self::initial_state(&scenario, seed);
         let router = Router::recurring(&scenario.network, &scenario.services);
         Ok(Self {
+            effective: scenario.clone(),
             scenario,
             router,
+            next_disruption: 0,
+            pending_updates: Default::default(),
+            reoptimization_policy: Default::default(),
             seed,
             running: false,
             state,
@@ -211,6 +251,8 @@ impl Simulator {
             active: vec![],
             reservations: Reservations::default(),
             routing_diagnostics: SearchDiagnostics::default(),
+            adaptation_metrics: Default::default(),
+            last_reoptimization: None,
             rails: scenario
                 .network
                 .rails
@@ -272,6 +314,10 @@ impl Simulator {
     /// Restore exactly a fresh, paused run with the same scenario and this seed.
     pub fn restart(&mut self, seed: u64) {
         self.state = Self::initial_state(&self.scenario, seed);
+        self.effective = self.scenario.clone();
+        self.router = Router::recurring(&self.effective.network, &self.effective.services);
+        self.next_disruption = 0;
+        self.pending_updates.clear();
         self.seed = seed;
         self.running = false;
         self.history.clear();
@@ -308,9 +354,25 @@ impl Simulator {
         evidence: Option<&mut crate::observation::DecisionEvidence>,
     ) -> Result<TickReport, SimulationError> {
         let mut next = self.state.clone();
-        let report = next.process_tick(&self.scenario, &self.router, evidence)?;
-        next.check_invariants(&self.scenario)?;
+        let (effective, next_disruption, changes) = self.prepare_disruptions();
+        let router = effective
+            .as_ref()
+            .map(|s| Router::recurring(&s.network, &s.services));
+        let report = next.process_tick(
+            effective.as_ref().unwrap_or(&self.effective),
+            router.as_ref().unwrap_or(&self.router),
+            &changes,
+            self.reoptimization_policy,
+            evidence,
+        )?;
+        next.check_invariants(effective.as_ref().unwrap_or(&self.effective))?;
         self.state = next;
+        if let Some(effective) = effective {
+            self.effective = effective;
+            self.router = router.unwrap();
+        }
+        self.next_disruption = next_disruption;
+        self.pending_updates.clear();
         for event in &report.events {
             if self.scenario.retained_events > 0 {
                 if self.history.len() == self.scenario.retained_events {
@@ -333,7 +395,7 @@ impl Simulator {
 
     /// Also run automatically before each tick commits.
     pub fn check_invariants(&self) -> Result<(), SimulationError> {
-        self.state.check_invariants(&self.scenario)
+        self.state.check_invariants(&self.effective)
     }
 }
 
@@ -376,6 +438,7 @@ mod tests {
             strategy: RoutingStrategy::CheapestStatic,
             max_active_payments: 2,
             retained_events: 8,
+            disruptions: vec![],
         };
         Simulator::new(scenario, 0).unwrap()
     }
@@ -429,6 +492,7 @@ mod reserved_boundary_tests {
         sim.scenario.strategy = RoutingStrategy::Reserved {
             limits: Default::default(),
         };
+        sim.effective = sim.scenario.clone();
         sim.state.next_minute = u128::from(u64::MAX);
         sim.step().unwrap();
         sim.step().unwrap();

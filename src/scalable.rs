@@ -320,13 +320,17 @@ impl Router {
     #[allow(clippy::too_many_arguments)]
     fn find_observed(
         &self,
-        payment: &Payment,
-        release: u128,
-        deadline: u128,
+        request: &Request<'_>,
         book: &Reservations,
         limits: SearchLimits,
         evidence: &mut Option<&mut DecisionEvidence>,
     ) -> (Option<Journey>, SearchDiagnostics) {
+        let Request {
+            payment,
+            release,
+            deadline,
+            forbidden,
+        } = *request;
         let source = self.nodes.binary_search(&payment.sender).unwrap();
         let target = self.nodes.binary_search(&payment.receiver).unwrap();
         let bounds = self.fee_bounds(payment, deadline.saturating_sub(release), target);
@@ -350,7 +354,13 @@ impl Router {
                 steps: vec![],
                 fee: 0,
             },
-            visited: vec![source],
+            visited: std::iter::once(source)
+                .chain(
+                    forbidden
+                        .iter()
+                        .map(|n| self.nodes.binary_search(n).unwrap()),
+                )
+                .collect(),
             live: true,
         }];
         let mut per_node = vec![vec![]; self.nodes.len()];
@@ -716,6 +726,7 @@ pub fn plan_schedule(
     let requests: Vec<_> = payments
         .iter()
         .map(|p| Request {
+            forbidden: &[],
             payment: &p.payment,
             release: p.earliest_execution_minute.into(),
             deadline: u128::from(p.deadline_minute.unwrap_or(u64::MAX))
@@ -739,6 +750,8 @@ pub(crate) struct Request<'a> {
     pub payment: &'a Payment,
     pub release: u128,
     pub deadline: u128,
+    /// Institutions in the immutable executed/in-flight prefix.
+    pub forbidden: &'a [String],
 }
 
 impl Router {
@@ -803,8 +816,7 @@ impl Router {
             let mut plans = vec![None; requests.len()];
             for i in order {
                 let r = &requests[i];
-                let (journey, stats) =
-                    self.find_observed(r.payment, r.release, r.deadline, &book, limits, evidence);
+                let (journey, stats) = self.find_observed(r, &book, limits, evidence);
                 diagnostics.plus(stats);
                 if let Some(ref j) = journey {
                     self.reserve(&mut book, j, r.payment.amount_cents);
@@ -853,9 +865,7 @@ impl Router {
                         candidate[j] = None;
                         for k in order {
                             let r = &requests[k];
-                            let (journey, stats) = self.find_observed(
-                                r.payment, r.release, r.deadline, &book, limits, evidence,
-                            );
+                            let (journey, stats) = self.find_observed(r, &book, limits, evidence);
                             diagnostics.plus(stats);
                             if let Some(ref journey) = journey {
                                 self.reserve(&mut book, journey, r.payment.amount_cents);
@@ -888,8 +898,7 @@ impl Router {
                     }
                 }
                 let r = &requests[i];
-                let (journey, stats) =
-                    self.find_observed(r.payment, r.release, r.deadline, &book, limits, evidence);
+                let (journey, stats) = self.find_observed(r, &book, limits, evidence);
                 diagnostics.plus(stats);
                 let mut candidate = best.clone();
                 candidate[i] = journey;
@@ -899,5 +908,75 @@ impl Router {
             }
         }
         (best, diagnostics)
+    }
+}
+
+impl Router {
+    /// Reconstruct and validate a prior suffix against the *new* recurring view
+    /// and the other retained suffixes. Reservation is all-or-nothing.
+    pub(crate) fn retain_journey(
+        &self,
+        request: &Request<'_>,
+        route: &Route,
+        departures: &[u128],
+        book: &Reservations,
+    ) -> Option<Journey> {
+        let Calendar::Recurring(services) = &self.calendar else {
+            return None;
+        };
+        if route.hops.len() != departures.len() || route.hops.is_empty() {
+            return None;
+        }
+        let mut at = request.payment.sender.as_str();
+        let mut ready = request.release;
+        let mut visited = request.forbidden.to_vec();
+        visited.push(at.into());
+        let mut journey = Journey {
+            steps: vec![],
+            fee: 0,
+        };
+        for (hop, &departure) in route.hops.iter().zip(departures) {
+            let r = self
+                .rails
+                .binary_search_by(|r| r.id.cmp(&hop.rail_id))
+                .ok()?;
+            let rail = &self.rails[r];
+            if hop.sender != at
+                || visited.contains(&hop.receiver)
+                || !rail.participants.contains(&hop.sender)
+                || !rail.participants.contains(&hop.receiver)
+                || !rail.available
+                || !services[r].is_open(departure)
+                || departure < ready
+                || rail
+                    .max_amount_cents
+                    .is_some_and(|c| request.payment.amount_cents > c)
+            {
+                return None;
+            }
+            let arrival = departure.checked_add(u128::from(rail.settlement_minutes))?;
+            let slot = Slot {
+                departure,
+                arrival,
+                fee: rail.fee_cents,
+                capacity: services[r].capacity_per_minute_cents,
+            };
+            if !self.fits(book, &journey, r, &slot, request.payment.amount_cents) {
+                return None;
+            }
+            journey.steps.push(Step {
+                rail: r,
+                from: self.nodes.binary_search(&hop.sender).ok()?,
+                to: self.nodes.binary_search(&hop.receiver).ok()?,
+                departure,
+                arrival,
+                fee: rail.fee_cents,
+            });
+            journey.fee += u128::from(rail.fee_cents);
+            ready = arrival;
+            at = &hop.receiver;
+            visited.push(at.into());
+        }
+        (at == request.payment.receiver && ready <= request.deadline).then_some(journey)
     }
 }

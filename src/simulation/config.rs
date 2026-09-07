@@ -32,7 +32,7 @@ pub struct RailService {
 }
 
 impl RailService {
-    pub(super) fn is_open(&self, minute: u128) -> bool {
+    pub(crate) fn is_open(&self, minute: u128) -> bool {
         let phase = minute % u128::from(self.period_minutes);
         phase >= u128::from(self.offset_minutes)
             && phase - u128::from(self.offset_minutes) < u128::from(self.open_minutes)
@@ -59,11 +59,20 @@ pub struct Scenario {
     pub max_active_payments: usize,
     /// Zero disables retained history; each step still returns its events.
     pub retained_events: usize,
+    /// Finite surprise events, applied before execution at their stated minute.
+    pub disruptions: Vec<super::Disruption>,
 }
 
 impl Scenario {
     pub fn validate(&self) -> Result<(), ValidationError> {
         self.network.validate()?;
+        let mut keys = std::collections::BTreeSet::new();
+        for event in &self.disruptions {
+            event.update.validate(self)?;
+            if !keys.insert((event.minute, &event.update.rail_id)) {
+                return Err(ValidationError("duplicate disruption minute/rail".into()));
+            }
+        }
         if let RoutingStrategy::Reserved { limits } = self.strategy {
             limits.validate()?;
         }

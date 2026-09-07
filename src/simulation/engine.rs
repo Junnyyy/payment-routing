@@ -1,8 +1,11 @@
 use super::*;
 use crate::observation::DecisionEvidence;
-use crate::routing::route_payment_observed;
 
-fn add(target: &mut u128, value: u128, field: &'static str) -> Result<(), SimulationError> {
+pub(super) fn add(
+    target: &mut u128,
+    value: u128,
+    field: &'static str,
+) -> Result<(), SimulationError> {
     *target = target
         .checked_add(value)
         .ok_or(SimulationError::ArithmeticOverflow(field))?;
@@ -18,7 +21,11 @@ fn require(condition: bool, message: &str) -> Result<(), SimulationError> {
 }
 
 impl State {
-    fn emit(&mut self, events: &mut Vec<Event>, kind: EventKind) -> Result<(), SimulationError> {
+    pub(super) fn emit(
+        &mut self,
+        events: &mut Vec<Event>,
+        kind: EventKind,
+    ) -> Result<(), SimulationError> {
         let sequence = self.next_event;
         add(&mut self.next_event, 1, "event sequence")?;
         events.push(Event {
@@ -33,6 +40,8 @@ impl State {
         &mut self,
         scenario: &Scenario,
         router: &Router,
+        changes: &[AppliedDisruption],
+        policy: ReoptimizationPolicy,
         mut evidence: Option<&mut DecisionEvidence>,
     ) -> Result<TickReport, SimulationError> {
         let minute = self.next_minute;
@@ -54,6 +63,10 @@ impl State {
             )?;
         }
 
+        for change in changes {
+            add(&mut self.adaptation_metrics.rail_changes, 1, "rail changes")?;
+            self.emit(&mut events, EventKind::DisruptionApplied(change.clone()))?;
+        }
         // Settle all existing departures before admitting this minute's arrivals.
         for mut payment in std::mem::take(&mut self.active) {
             let terminal = payment.in_flight_until == Some(minute)
@@ -62,54 +75,12 @@ impl State {
                 self.active.push(payment);
             }
         }
+        if !changes.is_empty() {
+            self.reoptimize(scenario, router, policy, &mut events, &mut evidence)?;
+        }
         self.generate(scenario, &mut events)?;
         if let RoutingStrategy::Reserved { limits } = scenario.strategy {
-            let pending: Vec<_> = self
-                .active
-                .iter()
-                .filter(|p| p.route.is_none() && !p.sla_failed)
-                .map(|p| crate::scalable::Request {
-                    payment: &p.payment,
-                    release: minute,
-                    deadline: p.deadline,
-                })
-                .collect();
-            let (plans, diagnostics) =
-                router.allocate_observed(&pending, &self.reservations, limits, &mut evidence);
-            self.routing_diagnostics.plus(diagnostics);
-            let mut plans = plans.into_iter();
-            for mut payment in std::mem::take(&mut self.active) {
-                if payment.route.is_none()
-                    && !payment.sla_failed
-                    && let Some(journey) = plans.next().unwrap()
-                {
-                    router.reserve(
-                        &mut self.reservations,
-                        &journey,
-                        payment.payment.amount_cents,
-                    );
-                    let route = router.route(&journey);
-                    payment.planned_departures =
-                        Some(journey.steps.iter().map(|s| s.departure).collect());
-                    self.emit(
-                        &mut events,
-                        EventKind::RouteAccepted {
-                            sequence: payment.sequence,
-                            route: route.clone(),
-                        },
-                    )?;
-                    if let (Some(evidence), Some(departures)) =
-                        (evidence.as_deref_mut(), &payment.planned_departures)
-                    {
-                        evidence
-                            .reserved_departures
-                            .insert(payment.payment.id.clone(), departures.clone());
-                    }
-                    add(&mut self.metrics.accepted_routes, 1, "accepted routes")?;
-                    payment.route = Some(route);
-                }
-                self.active.push(payment);
-            }
+            self.plan_pending(scenario, router, limits, &mut events, &mut evidence)?;
         }
 
         for mut payment in std::mem::take(&mut self.active) {
@@ -215,6 +186,7 @@ impl State {
                     planned_departures: None,
                     in_flight_until: None,
                     sla_failed: false,
+                    ever_routed: false,
                 });
             }
         }
@@ -241,7 +213,7 @@ impl State {
         if payment.in_flight_until.is_some() || payment.sla_failed {
             return Ok(false);
         }
-        if payment.route.is_none() {
+        if !payment.has_complete_plan() {
             if matches!(scenario.strategy, RoutingStrategy::Reserved { .. }) {
                 return Ok(false);
             }
@@ -249,27 +221,14 @@ impl State {
             for (i, rail) in view.rails.iter_mut().enumerate() {
                 rail.available = self.can_depart(scenario, i, payment.payment.amount_cents);
             }
-            let mut instruction = payment.payment.clone();
-            instruction.max_delivery_minutes = Some((payment.deadline - self.next_minute) as u64);
-            let route = match scenario.strategy {
-                RoutingStrategy::CheapestStatic => {
-                    route_payment_observed(&view, &instruction, evidence.as_deref_mut())?
-                }
-                RoutingStrategy::Reserved { .. } => unreachable!(),
-            };
-            let Some(route) = route else {
+            let Some(suffix) =
+                super::replan::static_suffix(view, payment, self.next_minute, evidence)?
+            else {
                 return Ok(false);
             };
-            self.emit(
-                events,
-                EventKind::RouteAccepted {
-                    sequence: payment.sequence,
-                    route: route.clone(),
-                },
-            )?;
-            add(&mut self.metrics.accepted_routes, 1, "accepted routes")?;
-            payment.route = Some(route);
+            self.install_suffix(scenario, payment, Some(suffix), events, evidence)?;
         }
+
         loop {
             if let Some(times) = &payment.planned_departures {
                 let departure = times[payment.next_hop];
@@ -350,7 +309,7 @@ impl State {
         }
     }
 
-    fn rail_index(&self, id: &str) -> usize {
+    pub(super) fn rail_index(&self, id: &str) -> usize {
         self.rails
             .iter()
             .position(|r| r.rail_id == id)
@@ -389,7 +348,7 @@ impl State {
         )?;
         payment.next_hop += 1;
         payment.in_flight_until = None;
-        if payment.next_hop == route.hops.len() {
+        if payment.next_hop == route.hops.len() && payment.has_complete_plan() {
             let elapsed = self.next_minute - payment.arrived_at;
             add(&mut self.metrics.completed, 1, "completed count")?;
             add(
@@ -490,7 +449,8 @@ impl State {
             }
             if let Some(route) = &payment.route {
                 require(
-                    payment.next_hop < route.hops.len(),
+                    payment.next_hop <= route.hops.len()
+                        && (!payment.has_complete_plan() || payment.next_hop < route.hops.len()),
                     "terminal route removed",
                 )?;
             } else {
@@ -527,12 +487,19 @@ impl State {
                         SimulationError::Invariant("reserved route without times".into())
                     })?;
                     require(times.len() == route.hops.len(), "reserved timestamp count")?;
-                    require(!p.sla_failed, "accepted reservation missed deadline")?;
+                    require(
+                        !p.sla_failed || !p.has_complete_plan(),
+                        "accepted reservation missed deadline",
+                    )?;
                     let mut ready = p.arrived_at;
-                    for (h, &departure) in route.hops.iter().zip(times) {
+                    for (index, (h, &departure)) in route.hops.iter().zip(times).enumerate() {
                         let r = self.rail_index(&h.rail_id);
                         require(
-                            departure >= ready && scenario.services[r].is_open(departure),
+                            departure >= ready
+                                && (index < p.fixed_hops()
+                                    || (departure >= self.next_minute
+                                        && scenario.network.rails[r].available
+                                        && scenario.services[r].is_open(departure))),
                             "reserved temporal feasibility",
                         )?;
                         ready = departure
@@ -545,7 +512,10 @@ impl State {
                                 u128::from(p.payment.amount_cents);
                         }
                     }
-                    require(ready <= p.deadline, "reserved final deadline")?;
+                    require(
+                        !p.has_complete_plan() || ready <= p.deadline,
+                        "reserved final deadline",
+                    )?;
                 } else {
                     require(p.planned_departures.is_none(), "times without route")?;
                 }

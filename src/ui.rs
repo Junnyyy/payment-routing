@@ -225,10 +225,13 @@ fn overview(app: &App) -> Vec<String> {
     let sim = &app.run().simulator;
     let m = sim.metrics();
     let active = sim.active_payments();
-    let unrouted = active.iter().filter(|p| p.route.is_none()).count();
+    let unrouted = active
+        .iter()
+        .filter(|p| !p.has_complete_plan() && p.in_flight_until.is_none())
+        .count();
     let waiting = active
         .iter()
-        .filter(|p| p.route.is_some() && p.in_flight_until.is_none())
+        .filter(|p| p.has_complete_plan() && p.in_flight_until.is_none())
         .count();
     let flight = active
         .iter()
@@ -442,16 +445,19 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
     let rows = sim
         .rail_states()
         .iter()
-        .zip(&sim.scenario().services)
+        .zip(&sim.effective_scenario().services)
         .map(|(r, s)| {
             let queue = sim
                 .active_payments()
                 .iter()
                 .filter(|p| {
                     p.in_flight_until.is_none()
-                        && p.route
-                            .as_ref()
-                            .is_some_and(|route| route.hops[p.next_hop].rail_id == r.rail_id)
+                        && p.route.as_ref().is_some_and(|route| {
+                            route
+                                .hops
+                                .get(p.next_hop)
+                                .is_some_and(|h| h.rail_id == r.rail_id)
+                        })
                 })
                 .count();
             let cap = s
@@ -479,9 +485,9 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
         })
         .collect();
     let i = app.tables[2].selected().unwrap_or(0);
-    let r = &sim.scenario().network.rails[i];
+    let r = &sim.effective_scenario().network.rails[i];
     let state = &sim.rail_states()[i];
-    let s = &sim.scenario().services[i];
+    let s = &sim.effective_scenario().services[i];
     let mut reservations: BTreeSlots = Default::default();
     for p in sim.active_payments() {
         if let (Some(route), Some(times)) = (&p.route, &p.planned_departures) {
@@ -544,19 +550,22 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
 fn rail_detail_lines(app: &App) -> Vec<String> {
     let sim = &app.run().simulator;
     let i = app.tables[2].selected().unwrap_or(0);
-    let r = &sim.scenario().network.rails[i];
-    let s = &sim.scenario().services[i];
+    let r = &sim.effective_scenario().network.rails[i];
+    let s = &sim.effective_scenario().services[i];
     let state = &sim.rail_states()[i];
     let mut slots: BTreeSlots = Default::default();
     let mut waits = vec![];
     for p in sim.active_payments() {
         if let Some(route) = &p.route {
-            if p.in_flight_until.is_none() && route.hops[p.next_hop].rail_id == r.id {
+            if p.in_flight_until.is_none()
+                && let Some(hop) = route.hops.get(p.next_hop)
+                && hop.rail_id == r.id
+            {
                 waits.push(format!(
                     "{} {} -> {} USD {} due {}",
                     p.payment.id,
-                    route.hops[p.next_hop].sender,
-                    route.hops[p.next_hop].receiver,
+                    hop.sender,
+                    hop.receiver,
                     money(p.payment.amount_cents as u128),
                     p.deadline
                 ));
@@ -654,7 +663,10 @@ fn network(frame: &mut Frame, area: Rect, app: &mut App) {
                 .filter(|p| {
                     p.in_flight_until.is_none()
                         && p.route.as_ref().map_or(p.payment.sender == n.id, |r| {
-                            r.hops[p.next_hop].sender == n.id
+                            r.hops.get(p.next_hop).map_or_else(
+                                || r.hops.last().is_some_and(|h| h.receiver == n.id),
+                                |h| h.sender == n.id,
+                            )
                         })
                 })
                 .count();
@@ -692,7 +704,7 @@ fn network(frame: &mut Frame, area: Rect, app: &mut App) {
             ])
         })
         .collect();
-    let n = &sim.scenario().network.institutions[app.tables[3].selected().unwrap_or(0)];
+    let n = &sim.effective_scenario().network.institutions[app.tables[3].selected().unwrap_or(0)];
     let text = format!(
         "{} / {}\nQueued = waiting at node; inbound = currently in-flight to node.\nRails join all their members. Opening USD is descriptive, never spent.",
         n.id, n.name
@@ -1000,6 +1012,7 @@ fn detail_lines(app: &App, p: &Dossier) -> Vec<String> {
             EventKind::Generated { .. } => "generated".into(),
             EventKind::Rejected { .. } => "overload rejected (SLA failure)".into(),
             EventKind::RouteAccepted { .. } => "route accepted".into(),
+            EventKind::PlanRevised { .. } => "plan revised after disruption/retry".into(),
             EventKind::HopDeparted {
                 hop,
                 fee_cents,
@@ -1023,7 +1036,9 @@ fn detail_lines(app: &App, p: &Dossier) -> Vec<String> {
                 elapsed_minutes,
                 ..
             } => format!("completed elapsed {}m late {}", elapsed_minutes, late),
-            EventKind::RailTick { .. } => continue,
+            EventKind::RailTick { .. }
+            | EventKind::DisruptionApplied(_)
+            | EventKind::Reoptimized(_) => continue,
         };
         lines.push(format!("@{} #{:<5} {}", e.minute, e.sequence, label));
     }
@@ -1341,6 +1356,7 @@ mod tests {
             strategy: RoutingStrategy::CheapestStatic,
             max_active_payments: 16,
             retained_events: 32,
+            disruptions: vec![],
         };
         let mut app = App::new(Preset::Balanced, 42).unwrap();
         for run in &mut app.ops.runs {

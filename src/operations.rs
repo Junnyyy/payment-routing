@@ -91,6 +91,7 @@ impl Preset {
             strategy,
             max_active_payments: if self == Self::Pressure { 16 } else { 64 },
             retained_events: 128,
+            disruptions: vec![],
         }
     }
 }
@@ -172,7 +173,9 @@ impl ObservedRun {
         let (report, mut evidence) = self.simulator.step_observed()?;
         for event in report.events {
             let sequence = match &event.kind {
-                EventKind::RailTick { .. } => continue,
+                EventKind::RailTick { .. }
+                | EventKind::DisruptionApplied(_)
+                | EventKind::Reoptimized(_) => continue,
                 EventKind::Generated {
                     sequence,
                     payment,
@@ -201,6 +204,7 @@ impl ObservedRun {
                 }
                 EventKind::Rejected { sequence }
                 | EventKind::RouteAccepted { sequence, .. }
+                | EventKind::PlanRevised { sequence, .. }
                 | EventKind::HopDeparted { sequence, .. }
                 | EventKind::HopSettled { sequence, .. }
                 | EventKind::DeadlineMissed { sequence }
@@ -214,6 +218,15 @@ impl ObservedRun {
             match &event.kind {
                 EventKind::RouteAccepted { route, .. } => {
                     p.route = Some(route.clone());
+                    p.decision_minute = Some(event.minute);
+                }
+                EventKind::PlanRevised {
+                    route,
+                    planned_departures,
+                    ..
+                } => {
+                    p.route = route.clone();
+                    p.planned_departures = planned_departures.clone();
                     p.decision_minute = Some(event.minute);
                 }
                 EventKind::Rejected { .. } => p.status = PaymentStatus::Rejected,
@@ -261,7 +274,7 @@ impl ObservedRun {
                 PaymentStatus::Draining
             } else if active.in_flight_until.is_some() {
                 PaymentStatus::InFlight
-            } else if active.route.is_some() {
+            } else if active.has_complete_plan() {
                 PaymentStatus::Waiting
             } else {
                 PaymentStatus::Queued

@@ -58,6 +58,7 @@ pub fn scenario(rails: Vec<Rail>) -> Scenario {
         strategy: RoutingStrategy::CheapestStatic,
         max_active_payments: 100,
         retained_events: 100,
+        disruptions: vec![],
     }
 }
 
