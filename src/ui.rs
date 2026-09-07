@@ -358,24 +358,45 @@ fn table(
 }
 fn payments(frame: &mut Frame, area: Rect, app: &mut App) {
     let ids = app.payment_ids();
+    let (mut id_width, mut due_width) = ids.iter().fold((10, 6), |(id_width, due_width), id| {
+        let p = &app.run().payments[id];
+        (
+            id_width.max(p.payment.id.len()),
+            due_width.max(p.deadline.to_string().len()),
+        )
+    });
+    // Keep borders (2), selection (2), gaps (6), the four fixed columns,
+    // and at least one full rail ID (7). Generated IDs and deadlines are ASCII.
+    let value_budget = usize::from(area.width) - (2 + 2 + 6 + 5 + 5 + 9 + 9 + 7);
+    while id_width + due_width > value_budget {
+        if id_width > due_width {
+            id_width -= 1;
+        } else {
+            due_width -= 1;
+        }
+    }
     let rows = ids
         .iter()
         .map(|id| {
             let p = &app.run().payments[id];
+            let id_lines = wrapped(vec![p.payment.id.clone()], id_width);
+            let due_lines = wrapped(vec![p.deadline.to_string()], due_width);
+            let height = id_lines.len().max(due_lines.len()) as u16;
             let route = p
                 .route
                 .as_ref()
                 .map(route_short)
                 .unwrap_or_else(|| "--".into());
             Row::new(vec![
-                p.payment.id.clone(),
+                id_lines.join("\n"),
                 p.payment.sender.clone(),
                 p.payment.receiver.clone(),
                 money(p.payment.amount_cents as u128),
                 p.status.label().into(),
-                p.deadline.to_string(),
+                due_lines.join("\n"),
                 route,
             ])
+            .height(height)
             .style(Style::new().fg(status_color(p.status)))
         })
         .collect();
@@ -403,12 +424,12 @@ fn payments(frame: &mut Frame, area: Rect, app: &mut App) {
         title,
         vec!["ID", "From", "To", "USD", "State", "Due", "Route"],
         vec![
-            Constraint::Length(10),
+            Constraint::Length(id_width as u16),
             Constraint::Length(5),
             Constraint::Length(5),
             Constraint::Length(9),
             Constraint::Length(9),
-            Constraint::Length(6),
+            Constraint::Length(due_width as u16),
             Constraint::Fill(1),
         ],
         rows,
@@ -1089,6 +1110,69 @@ mod tests {
             std::fs::write(format!("{dir}/{name}-{w}x{h}.txt"), &text).unwrap();
         }
         text
+    }
+    fn large_payment_fixture(sequences: &[u128], deadline: u128) -> App {
+        let mut app = App::new(Preset::Balanced, 42).unwrap();
+        app.step();
+        let template = app.run().payments[&1].clone();
+        let payments = &mut app.ops.runs[app.strategy].payments;
+        payments.clear();
+        for &sequence in sequences {
+            let mut p = template.clone();
+            p.sequence = sequence;
+            p.payment.id = format!("SIM-{sequence}");
+            p.deadline = deadline;
+            payments.insert(sequence, p);
+        }
+        app.view = View::Payments;
+        app.sync_selection();
+        app
+    }
+    #[test]
+    fn million_payment_ids_and_deadlines_remain_distinct_and_complete() {
+        let sequences = [999_999, 1_000_000, 1_000_001];
+        let mut app = large_payment_fixture(&sequences, 1_000_012);
+        for width in [80, 120] {
+            let output = screen(&mut app, width, 18, "million-payments");
+            for sequence in sequences {
+                assert!(output.contains(&format!("SIM-{sequence}")), "{output}");
+            }
+            assert_eq!(
+                output.matches("1000012").count(),
+                sequences.len(),
+                "{output}"
+            );
+        }
+    }
+    #[test]
+    fn wide_payment_values_wrap_without_losing_digits_or_selection() {
+        let sequences: Vec<_> = (0..6).map(|i| u128::MAX - i).collect();
+        let mut app = large_payment_fixture(&sequences, u128::MAX);
+        for width in [80, 120, 180] {
+            for (key_code, expected) in
+                [(KeyCode::Home, sequences[0]), (KeyCode::End, sequences[5])]
+            {
+                key(&mut app, key_code);
+                let output = screen(&mut app, width, 18, "wide-payments");
+                // Read columns from the rendered headers, joining continuation
+                // lines to verify the complete selected value is on screen.
+                let mut rows = output.lines().filter_map(|line| line.strip_prefix('│'));
+                let header = rows.next().unwrap();
+                let id = header.find("ID").unwrap()..header.find("From").unwrap();
+                let due = header.find("Due").unwrap()..header.find("Route").unwrap();
+                let (mut ids, mut deadlines) = (String::new(), String::new());
+                for row in rows {
+                    ids.push_str(row[id.clone()].trim());
+                    deadlines.push_str(row[due.clone()].trim());
+                }
+                assert!(ids.contains(&format!("SIM-{expected}")), "{output}");
+                assert!(deadlines.contains(&u128::MAX.to_string()), "{output}");
+                assert_eq!(app.selected_payment, Some(expected));
+                key(&mut app, KeyCode::Enter);
+                assert_eq!(app.detail.as_ref().unwrap().sequence, expected);
+                key(&mut app, KeyCode::Esc);
+            }
+        }
     }
     #[test]
     fn deterministic_scenarios_render_all_views_at_minimum_and_large_sizes() {
