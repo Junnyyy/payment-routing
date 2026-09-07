@@ -786,12 +786,13 @@ fn optimizer(app: &App) -> Vec<String> {
         ));
         for (label, score) in [("Preserve", &r.preserve), ("Recompute", &r.recompute)] {
             lines.push(format!(
-                "{}: planned {}/{} | fee USD {} | elapsed {}m | churn {}/{}",
+                "{}: planned {}/{} | fee {}c | time {}m | hops {} | churn {}/{}",
                 label,
                 score.planned,
                 score.eligible_payments,
-                money(score.remaining_fee_cents),
+                score.remaining_fee_cents,
                 score.remaining_elapsed_minutes,
+                score.remaining_hops,
                 score.changed_assignments,
                 score.previously_planned
             ));

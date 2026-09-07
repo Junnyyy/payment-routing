@@ -55,6 +55,7 @@ pub enum ReoptimizationPolicy {
     Adaptive {
         max_extra_fee_cents: u128,
         max_extra_elapsed_minutes: u128,
+        max_extra_hops: usize,
     },
 }
 impl Default for ReoptimizationPolicy {
@@ -62,6 +63,7 @@ impl Default for ReoptimizationPolicy {
         Self::Adaptive {
             max_extra_fee_cents: 0,
             max_extra_elapsed_minutes: 0,
+            max_extra_hops: 0,
         }
     }
 }

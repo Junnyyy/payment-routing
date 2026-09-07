@@ -52,8 +52,8 @@ witnesses. All optimization remains in the terminal-independent library.
 `Simulator::queue_rail_update` and `Operations::queue_rail_update` stage explicit
 next-tick controls. Executed/in-flight hops remain fixed, invalid future
 reservations are released, and unresolved suffixes queue until repaired or expired.
-The default adaptive policy permits zero extra fees or elapsed minutes relative
-to recomputation. Preservation and explicit fee/time allowances are also available.
+The default adaptive policy permits zero extra fees, elapsed minutes or hops relative
+to recomputation. Preservation and explicit fee/time/hop allowances are also available.
 See the [contract and API](docs/disruptions.md) and [measured tradeoffs](docs/disruption-report.md).
 
 ## Static reference fixture

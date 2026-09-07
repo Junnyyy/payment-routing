@@ -333,6 +333,7 @@ impl State {
             ReoptimizationPolicy::Adaptive {
                 max_extra_fee_cents,
                 max_extra_elapsed_minutes,
+                max_extra_hops,
             } => {
                 if a.planned != b.planned {
                     a.planned > b.planned
@@ -344,6 +345,7 @@ impl State {
                         && a.remaining_elapsed_minutes
                             .saturating_sub(b.remaining_elapsed_minutes)
                             <= max_extra_elapsed_minutes
+                        && a.remaining_hops.saturating_sub(b.remaining_hops) <= max_extra_hops
                 }
             }
         };

@@ -32,13 +32,13 @@ and final hops already in flight are excluded. Churn is per decision; repeat
 changes of the same payment count again in cumulative totals.
 
 Policies are explicit: Preserve, Recompute, or Adaptive with nonnegative absolute
-fee and elapsed-minute allowances. Adaptive first prefers more planned payments;
+fee, elapsed-minute and hop-count allowances. Adaptive first prefers more planned payments;
 for equal coverage of the *same payment IDs*, it retains the preserve candidate
-only within both allowances of recompute. Otherwise it uses recompute. Equal
+only within all three allowances of recompute. Otherwise it uses recompute. Equal
 counts with different served IDs are an identity/fairness tradeoff: choose the
 candidate retaining more prior plans, then the preserve candidate on a tie, and
 flag the incomparable cohorts. Neither partial-cohort fee difference is an
-optimality gap. Default allowances are zero; callers can explicitly buy stability.
+optimality gap. Stability takes precedence over lexical tie-breaking. Default allowances are zero; callers can explicitly buy stability.
 Report both alternatives even when Preserve or Recompute is selected.
 
 Candidate fees cover future hops only; sunk fees are excluded. Reserved elapsed
@@ -72,7 +72,7 @@ no disruption or churn and does not reoptimize.
 
 ```rust
 use payment_routing::simulation::{RailUpdate, ReoptimizationPolicy};
-// `sim` is an existing Simulator; this control applies at its next minute.
+// The control applies at the simulator's next minute.
 let mut sim = payment_routing::simulation::Simulator::new(
     payment_routing::operations::Preset::Balanced.scenario(
         payment_routing::simulation::RoutingStrategy::Reserved { limits: Default::default() }
@@ -85,6 +85,7 @@ sim.queue_rail_update(RailUpdate {
 sim.set_reoptimization_policy(ReoptimizationPolicy::Adaptive {
     max_extra_fee_cents: 0,
     max_extra_elapsed_minutes: 0,
+    max_extra_hops: 0,
 });
 let report = sim.step()?;
 Ok::<(), payment_routing::simulation::SimulationError>(())
