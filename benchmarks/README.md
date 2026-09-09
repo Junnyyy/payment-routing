@@ -101,3 +101,12 @@ global gap. See [the final report](../docs/scalable-routing-report.md) and
 [experiment log](../docs/scalable-routing.md) for interpretation and retained
 pathologies. Final `strategy-final.json` uses a ten-second guard; the original
 frontier and early strategy experiments used shorter guards.
+
+## Paired online evaluation
+
+`evaluation-results.csv` records 135 independent strategy runs on 27 identical
+world/seed workloads, plus overall and per-world aggregates. The separate
+`evaluation-shock-results.csv` isolates a one-minute surprise-closure cohort.
+See [evaluation results and reproduction commands](../docs/evaluation-report.md)
+and the [metric/information contract](../docs/evaluation.md). These are deterministic
+outcome measurements; the supervised runtime benchmark contract above is unchanged.

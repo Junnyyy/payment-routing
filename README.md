@@ -51,7 +51,8 @@ Unfinished work is censored and unranked. Every CLI run verifies exact event/sta
 replay. Use `--format payments` to export the complete outcome ledger and
 `--strategies static,reserved,preserve,recompute,tight` to compare policy/limit
 variants. See the [evaluation contract](docs/evaluation.md) for metric definitions,
-horizon/drainage, scenario coverage and verification.
+horizon/drainage, scenario coverage and verification. The [measured report](docs/evaluation-report.md)
+preserves the 135-run benchmark and opposing failure cases.
 
 ## Disruptions and adaptive routing
 
