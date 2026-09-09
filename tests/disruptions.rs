@@ -44,6 +44,155 @@ fn first_decision(c: Scenario, policy: ReoptimizationPolicy) -> Simulator {
     s
 }
 
+fn assert_static_fifo_cohort(c: Scenario, seed: u64, expected_fees: [u128; 2]) {
+    for policy in [
+        ReoptimizationPolicy::Preserve,
+        ReoptimizationPolicy::Recompute,
+        ReoptimizationPolicy::default(),
+    ] {
+        // Compare no change, a scheduled change, and the equivalent control.
+        for source in 0..3 {
+            let mut c = c.clone();
+            let change = update("U", None, Some(Some(200)));
+            if source == 1 {
+                scheduled(&mut c, 1, change.clone());
+            }
+            let mut sim = Simulator::new(c.clone(), seed).unwrap();
+            sim.set_reoptimization_policy(policy);
+            let mut audit = audit::Audit::default();
+            let first = sim.step().unwrap();
+            audit.check(&c, &first, &sim);
+            assert_eq!(sim.metrics().generated, 2);
+            let sunk = sim.metrics().routing_cost_cents;
+            let mut events = first.events;
+            if source == 2 {
+                sim.queue_rail_update(change).unwrap();
+            }
+            for _ in 1..=c.arrivals.max_sla_minutes {
+                let mut observed = sim.clone();
+                let report = sim.step().unwrap();
+                let (observed_report, _) = observed.step_observed().unwrap();
+                assert_eq!(report, observed_report);
+                assert_eq!(sim, observed);
+                audit.check(&c, &report, &sim);
+                events.extend(report.events);
+            }
+            let mut fees = [0; 2];
+            let mut completed = [false; 2];
+            for event in events {
+                match event.kind {
+                    EventKind::HopDeparted {
+                        sequence,
+                        fee_cents,
+                        ..
+                    } if sequence <= 2 => {
+                        fees[sequence as usize - 1] += u128::from(fee_cents);
+                    }
+                    EventKind::Completed { sequence, late, .. } if sequence <= 2 => {
+                        assert!(!late);
+                        completed[sequence as usize - 1] = true;
+                    }
+                    EventKind::DeadlineMissed { sequence } if sequence <= 2 => {
+                        panic!(
+                            "original payment {sequence} missed its SLA: {policy:?}, source {source}"
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!(completed, [true; 2]);
+            assert_eq!(fees, expected_fees, "{policy:?}, source {source}");
+            if source != 0 {
+                let r = sim.last_reoptimization().unwrap();
+                assert!(r.same_planned_cohort);
+                for assessment in [&r.preserve, &r.recompute] {
+                    assert_eq!(assessment.planned, 2);
+                    assert_eq!(
+                        assessment.remaining_fee_cents,
+                        expected_fees.iter().sum::<u128>() - sunk
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn static_unrelated_disruption_preserves_fifo_capacity_for_queued_payments() {
+    for latency in [0, 1] {
+        let mut c = scenario(vec![
+            rail("X", &["A", "B"], 1, latency),
+            rail("Y", &["A", "B"], 2, latency),
+            rail("U", &["C", "D"], 1000, 0),
+        ]);
+        c.arrivals.attempts_per_minute = 2;
+        sla(&mut c, 1 + u64::from(latency));
+        for s in &mut c.services {
+            s.period_minutes = 10;
+            s.offset_minutes = 1;
+            s.open_minutes = 1;
+            s.capacity_per_minute_cents = Some(100);
+        }
+        assert_static_fifo_cohort(c, 42, [1, 2]);
+    }
+}
+
+#[test]
+fn static_fifo_projection_includes_retained_departures_but_not_future_hops() {
+    for latency in [1, 2] {
+        let mut c = scenario(vec![
+            rail("X", &["A", "C"], 1, latency),
+            rail("Y", &["C", "B"], 1, 0),
+            rail("Z", &["A", "B"], 5, 0),
+            rail("U", &["C", "D"], 1000, 0),
+        ]);
+        c.arrivals.attempts_per_minute = 2;
+        sla(&mut c, u64::from(latency) + 1);
+        for s in &mut c.services {
+            s.capacity_per_minute_cents = Some(100);
+            if s.rail_id == "Z" {
+                s.period_minutes = 10;
+                s.offset_minutes = 1;
+                s.open_minutes = 1;
+            }
+        }
+        // At minute 1, the first payment either departs Y now or is still
+        // in flight on X. Only the former consumes this minute's Y budget.
+        assert_static_fifo_cohort(c, 42, [2, if latency == 1 { 5 } else { 2 }]);
+    }
+}
+
+#[test]
+fn static_fifo_projection_consumes_every_immediate_zero_latency_hop() {
+    let mut c = scenario(vec![
+        rail("X", &["A", "C"], 1, 0),
+        rail("Y", &["C", "B"], 1, 0),
+        rail("W", &["C", "B"], 4, 0),
+        rail("U", &["C", "D"], 1000, 0),
+    ]);
+    c.arrivals.attempts_per_minute = 2;
+    c.arrivals.flows.push(PaymentFlow {
+        sender: "C".into(),
+        receiver: "B".into(),
+    });
+    sla(&mut c, 1);
+    for s in &mut c.services {
+        s.period_minutes = 10;
+        s.offset_minutes = 1;
+        s.open_minutes = 1;
+        s.capacity_per_minute_cents = Some(100);
+    }
+    let seed = (0..64)
+        .find(|&seed| {
+            let mut sim = Simulator::new(c.clone(), seed).unwrap();
+            let first = sim.step().unwrap();
+            let demand = generated(&first);
+            demand[0].1.sender == "A" && demand[1].1.sender == "C"
+        })
+        .unwrap();
+    assert_static_fifo_cohort(c, seed, [2, 4]);
+}
+
 #[test]
 fn equal_objective_recovery_avoids_twenty_four_unnecessary_route_changes() {
     let c = recovery(24, 5, 5);

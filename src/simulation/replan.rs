@@ -438,16 +438,58 @@ impl State {
                 Ok((plans, stats))
             }
             RoutingStrategy::CheapestStatic => {
-                for i in pending {
-                    let mut view = scenario.network.clone();
-                    for (r, rail) in view.rails.iter_mut().enumerate() {
-                        rail.available &= scenario.services[r].is_open(work[i].release)
-                            && scenario.services[r]
-                                .capacity_per_minute_cents
-                                .is_none_or(|c| work[i].payment.amount_cents <= c);
+                let mut used: Vec<_> = self
+                    .rails
+                    .iter()
+                    .map(|r| r.used_this_minute_cents)
+                    .collect();
+                let can_depart = |r: usize, release: u128, amount: u64, used: &[u128]| {
+                    let used = if release == self.next_minute {
+                        used[r]
+                    } else {
+                        0
+                    };
+                    scenario.network.rails[r].available
+                        && scenario.services[r].is_open(release)
+                        && scenario.services[r]
+                            .capacity_per_minute_cents
+                            .is_none_or(|c| u128::from(amount) <= u128::from(c) - used)
+                };
+                // Project this minute's FIFO departures for each candidate,
+                // including retained plans. Future hops consume no budget yet.
+                for (i, w) in work.iter().enumerate() {
+                    if plans[i].is_none() {
+                        let mut view = scenario.network.clone();
+                        for (r, rail) in view.rails.iter_mut().enumerate() {
+                            rail.available =
+                                can_depart(r, w.release, w.payment.amount_cents, &used);
+                        }
+                        plans[i] = static_suffix(
+                            view,
+                            &self.active[indices[i]],
+                            self.next_minute,
+                            evidence,
+                        )?;
                     }
-                    plans[i] =
-                        static_suffix(view, &self.active[indices[i]], self.next_minute, evidence)?;
+                    if w.release != self.next_minute {
+                        continue;
+                    }
+                    if let Some(plan) = &plans[i] {
+                        for hop in &plan.route.hops {
+                            let r = self.rail_index(&hop.rail_id);
+                            if !can_depart(r, w.release, w.payment.amount_cents, &used) {
+                                break;
+                            }
+                            add(
+                                &mut used[r],
+                                u128::from(w.payment.amount_cents),
+                                "projected static capacity",
+                            )?;
+                            if scenario.network.rails[r].settlement_minutes > 0 {
+                                break;
+                            }
+                        }
+                    }
                 }
                 Ok((plans, SearchDiagnostics::default()))
             }
