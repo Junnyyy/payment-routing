@@ -13,7 +13,7 @@ use std::{collections::VecDeque, error::Error, fmt};
 
 use crate::scalable::{Reservations, Router, SearchDiagnostics};
 use crate::{network::Payment, network::ValidationError, routing::Route, routing::RouteHop};
-use rng::Random;
+pub(crate) use rng::{ArrivalSample, Random};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SimulationError {
@@ -228,8 +228,10 @@ impl Simulator {
             .sort_by(|a, b| (a.minute, &a.update.rail_id).cmp(&(b.minute, &b.update.rail_id)));
         let state = Self::initial_state(&scenario, seed);
         let router = Router::recurring(&scenario.network, &scenario.services);
+        let mut effective = scenario.clone();
+        effective.disruptions.clear();
         Ok(Self {
-            effective: scenario.clone(),
+            effective,
             scenario,
             router,
             next_disruption: 0,
@@ -315,6 +317,7 @@ impl Simulator {
     pub fn restart(&mut self, seed: u64) {
         self.state = Self::initial_state(&self.scenario, seed);
         self.effective = self.scenario.clone();
+        self.effective.disruptions.clear();
         self.router = Router::recurring(&self.effective.network, &self.effective.services);
         self.next_disruption = 0;
         self.pending_updates.clear();
@@ -336,7 +339,7 @@ impl Simulator {
     pub fn step(&mut self) -> Result<TickReport, SimulationError> {
         // Only bounded mutable state is copied. History and fixed configuration
         // are not cloned per tick. Errors discard the working transaction.
-        self.step_inner(None)
+        self.step_inner(None, None)
     }
 
     /// Same transactional tick, with bounded evidence from actual search branches.
@@ -345,15 +348,24 @@ impl Simulator {
         &mut self,
     ) -> Result<(TickReport, crate::observation::DecisionEvidence), SimulationError> {
         let mut evidence = crate::observation::DecisionEvidence::default();
-        let report = self.step_inner(Some(&mut evidence))?;
+        let report = self.step_inner(Some(&mut evidence), None)?;
         Ok((report, evidence))
     }
 
     fn step_inner(
         &mut self,
         evidence: Option<&mut crate::observation::DecisionEvidence>,
+        arrivals: Option<&[ArrivalSample]>,
     ) -> Result<TickReport, SimulationError> {
         let mut next = self.state.clone();
+        let sampled;
+        let arrivals = match arrivals {
+            Some(arrivals) => arrivals,
+            None => {
+                sampled = next.random.arrivals(&self.scenario.arrivals);
+                &sampled
+            }
+        };
         let (effective, next_disruption, changes) = self.prepare_disruptions();
         let router = effective
             .as_ref()
@@ -364,6 +376,7 @@ impl Simulator {
             &changes,
             self.reoptimization_policy,
             evidence,
+            arrivals,
         )?;
         next.check_invariants(effective.as_ref().unwrap_or(&self.effective))?;
         self.state = next;
@@ -382,6 +395,16 @@ impl Simulator {
             }
         }
         Ok(report)
+    }
+
+    /// Evaluation's world driver owns the RNG and reveals only this tick's work.
+    /// An empty slice drains existing work without changing the arrival process
+    /// visible to the strategy or announcing the evaluation horizon.
+    pub(crate) fn step_with_arrivals(
+        &mut self,
+        arrivals: &[ArrivalSample],
+    ) -> Result<TickReport, SimulationError> {
+        self.step_inner(None, Some(arrivals))
     }
 
     /// Repeat manual steps without retaining their reports. Earlier successful
