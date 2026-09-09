@@ -1,5 +1,8 @@
 //! Paired finite-cohort evaluation. The world driver owns unrevealed demand.
 //! Metric definitions and the information boundary are in `docs/evaluation.md`.
+mod report;
+pub mod scenarios;
+pub use report::{Aggregate, CaseKey, PairComparison, Ratio};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -290,17 +293,14 @@ struct Running {
     result: RunResult,
 }
 impl Running {
-    fn new(
-        world: &World,
-        seed: u64,
-        strategy: &Strategy,
-        config: Config,
-    ) -> Result<Self, SimulationError> {
+    fn new(world: &World, strategy: &Strategy, config: Config) -> Result<Self, SimulationError> {
         let mut scenario = world.scenario.clone();
         scenario.strategy = strategy.routing;
         // The driver alone owns surprise events. Only due updates enter the run.
         scenario.disruptions.clear();
-        let mut simulator = Simulator::new(scenario, seed)?;
+        // Injected arrivals never consult this simulator's RNG. Keep the real
+        // world seed outside the run as well as the future event list.
+        let mut simulator = Simulator::new(scenario, 0)?;
         simulator.set_reoptimization_policy(strategy.reoptimization);
         let twin = config.verify_replay.then(|| simulator.clone());
         Ok(Self {
@@ -513,7 +513,7 @@ fn run_case(
 ) -> Result<CaseResult, SimulationError> {
     let mut running = strategies
         .iter()
-        .map(|s| Running::new(world, seed, s, config))
+        .map(|s| Running::new(world, s, config))
         .collect::<Result<Vec<_>, _>>()?;
     let mut random = Random(seed);
     let mut disruptions: Vec<_> = world.scenario.disruptions.iter().collect();
@@ -575,4 +575,37 @@ fn run_case(
         offered_volume_cents,
         runs,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replay_mismatch_keeps_only_committed_observations_and_is_unranked() {
+        let world = scenarios::named("reservation-trap").unwrap();
+        let strategy = Strategy::named("static").unwrap();
+        let mut run = Running::new(&world, &strategy, Config::default()).unwrap();
+        assert_eq!(run.simulator.seed(), 0);
+        assert!(run.simulator.scenario().disruptions.is_empty());
+        let before = run.simulator.clone();
+        run.twin
+            .as_mut()
+            .unwrap()
+            .queue_rail_update(RailUpdate {
+                rail_id: "fast".into(),
+                available: Some(false),
+                capacity_per_minute_cents: None,
+            })
+            .unwrap();
+        let arrivals = Random(42).arrivals(&world.scenario.arrivals);
+        run.step(&arrivals, &[], 0).unwrap();
+        assert_eq!(run.simulator, before);
+        let result = run.finish().unwrap();
+        assert!(matches!(result.status, Status::Error { minute: 0, .. }));
+        assert!(!result.replay_verified);
+        assert_eq!(result.processed_minutes, 0);
+        assert!(result.payments.is_empty());
+        assert_eq!(result.score(), None);
+    }
 }

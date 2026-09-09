@@ -245,3 +245,149 @@ fn empty_demand_and_invalid_benchmarks_are_explicit() {
         .is_err()
     );
 }
+
+#[test]
+fn aggregates_use_only_identical_complete_cases_and_keep_exclusions() {
+    let e = compare(scenario(vec![rail("ab", &["A", "B"], 7, 0)]), 3, 0);
+    let mut mixed = e.clone();
+    let mut incomplete = mixed.cases[0].clone();
+    incomplete.seed = 7;
+    incomplete.runs[0].status = Status::Error {
+        minute: 2,
+        message: "injected error".into(),
+    };
+    incomplete.runs[1].status = Status::Censored;
+    mixed.cases.push(incomplete);
+    for (index, a) in mixed.aggregates().unwrap().iter().enumerate() {
+        assert_eq!((a.total_cases, a.matched_cases), (2, 1));
+        assert_eq!(
+            (a.error_cases, a.censored_cases),
+            if index == 0 { (1, 0) } else { (0, 1) }
+        );
+        assert_eq!(a.metrics, e.cases[0].runs[index].metrics);
+        assert_eq!(a.tied_best, 1);
+    }
+    assert!(mixed.has_incomplete_runs());
+    assert!(mixed.to_csv().unwrap().contains("injected error"));
+    assert!(mixed.to_text().unwrap().contains("ERROR minute=2"));
+    let mut overflowing = mixed;
+    overflowing.cases[1] = overflowing.cases[0].clone();
+    overflowing.cases[0].runs[0].metrics.routing_cost_cents = u128::MAX;
+    assert!(overflowing.aggregates().is_err());
+}
+
+#[test]
+fn exact_fraction_order_and_empty_percentiles_do_not_hide_tail_failures() {
+    for a in 0..15 {
+        for b in 1..15 {
+            for c in 0..15 {
+                for d in 1..15 {
+                    assert_eq!(
+                        Ratio::new(a, b).unwrap().compare(Ratio::new(c, d).unwrap()),
+                        (a * d).cmp(&(c * b))
+                    );
+                }
+            }
+        }
+    }
+    assert!(
+        Ratio::new(u128::MAX - 1, u128::MAX)
+            .unwrap()
+            .compare(Ratio::new(u128::MAX - 2, u128::MAX - 1).unwrap())
+            .is_gt()
+    );
+    assert_eq!(Ratio::new(0, 0), None);
+    let mut e = compare(scenario(vec![rail("ab", &["A", "B"], 7, 0)]), 1, 0);
+    let mut disconnected = scenario(vec![]);
+    sla(&mut disconnected, 0);
+    let mut bad = compare(disconnected, 1, 0).cases.remove(0);
+    bad.world = "catastrophe".into();
+    for _ in 0..19 {
+        e.cases.push(e.cases[0].clone());
+    }
+    e.cases.push(bad);
+    for a in e.aggregates().unwrap() {
+        assert_eq!(a.worst_case.unwrap().world, "catastrophe");
+        assert_eq!(a.worst_not_on_time.unwrap().percent(), "100.00%");
+        // 1 bad / 21 cases is below the top 5%; worst remains visible beside p95.
+        assert_eq!(a.p95_not_on_time.unwrap().percent(), "0.00%");
+    }
+}
+
+#[test]
+fn adversarial_suite_breaks_blanket_dominance_and_matches_payment_ids() {
+    let strategies = [
+        Strategy::named("static").unwrap(),
+        Strategy::named("reserved").unwrap(),
+    ];
+    let config = Config {
+        arrival_minutes: 1,
+        drain_minutes: 8,
+        verify_replay: true,
+    };
+    let mut trap = scenarios::named("reservation-trap").unwrap();
+    trap.scenario.arrivals.probability_per_million = 1_000_000;
+    let e = evaluate(&[trap], &[42], &strategies, config).unwrap();
+    let case = &e.cases[0];
+    assert_eq!((case.runs[0].on_time(), case.runs[1].on_time()), (2, 0));
+    assert!(case.runs[0].score() < case.runs[1].score());
+    assert!(case.runs[0].metrics.routing_cost_cents > case.runs[1].metrics.routing_cost_cents);
+    let p = &case.pairs().unwrap()[0];
+    assert_eq!(p.only_left_on_time, [1, 2]);
+    assert_eq!(p.common_on_time, 0);
+    let a = e.aggregates_for_world("reservation-trap").unwrap();
+    assert_eq!(a[1].worst_service_shortfall.unwrap().percent(), "100.00%");
+    assert_eq!(a[1].worst_shortfall_case.as_ref().unwrap().seed, 42);
+    assert!(e.aggregates_for_world("unknown").is_err());
+    assert!(e.to_text().unwrap().contains("DIFFERENT COHORTS"));
+    let mut connection = scenarios::named("missed-connection").unwrap();
+    connection.scenario.arrivals.probability_per_million = 1_000_000;
+    let e = evaluate(&[connection], &[42], &strategies, config).unwrap();
+    assert_eq!(
+        (e.cases[0].runs[0].on_time(), e.cases[0].runs[1].on_time()),
+        (0, 2)
+    );
+    assert!(e.cases[0].runs[1].score() < e.cases[0].runs[0].score());
+}
+
+#[test]
+fn default_suite_reproduces_with_or_without_twin_checks_and_reordered_inputs() {
+    let worlds = scenarios::all();
+    let strategies = [
+        Strategy::named("static").unwrap(),
+        Strategy::named("reserved").unwrap(),
+        Strategy::named("tight").unwrap(),
+    ];
+    let config = Config {
+        arrival_minutes: 8,
+        drain_minutes: 16,
+        verify_replay: true,
+    };
+    let e = evaluate(&worlds, &[0, 42], &strategies, config).unwrap();
+    assert!(!e.has_incomplete_runs());
+    let mut reversed = worlds.clone();
+    reversed.reverse();
+    let mut repeated = evaluate(
+        &reversed,
+        &[42, 0],
+        &strategies,
+        Config {
+            verify_replay: false,
+            ..config
+        },
+    )
+    .unwrap();
+    for case in &e.cases {
+        let other = repeated
+            .cases
+            .iter_mut()
+            .find(|c| c.world == case.world && c.seed == case.seed)
+            .unwrap();
+        for r in &mut other.runs {
+            r.replay_verified = true;
+        }
+        assert_eq!(case, other);
+    }
+    assert!(e.to_csv().unwrap().starts_with("\"record\",\"version\""));
+    assert!(e.payments_csv().starts_with("\"version\",\"world\""));
+}
