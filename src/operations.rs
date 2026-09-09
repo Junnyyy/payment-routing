@@ -19,15 +19,23 @@ pub enum Preset {
     Pressure,
     Outage,
     Limited,
+    Disruptions,
 }
 impl Preset {
-    pub const ALL: [Self; 4] = [Self::Balanced, Self::Pressure, Self::Outage, Self::Limited];
+    pub const ALL: [Self; 5] = [
+        Self::Balanced,
+        Self::Pressure,
+        Self::Outage,
+        Self::Limited,
+        Self::Disruptions,
+    ];
     pub fn name(self) -> &'static str {
         match self {
             Self::Balanced => "balanced",
             Self::Pressure => "pressure",
             Self::Outage => "outage",
             Self::Limited => "limited",
+            Self::Disruptions => "disruptions",
         }
     }
     pub fn scenario(self, strategy: RoutingStrategy) -> Scenario {
@@ -91,6 +99,60 @@ impl Preset {
             strategy,
             max_active_payments: if self == Self::Pressure { 16 } else { 64 },
             retained_events: 128,
+            disruptions: if self == Self::Disruptions {
+                vec![
+                    Disruption {
+                        minute: 4,
+                        update: RailUpdate {
+                            rail_id: "ACH".into(),
+                            available: Some(false),
+                            capacity_per_minute_cents: None,
+                        },
+                    },
+                    Disruption {
+                        minute: 8,
+                        update: RailUpdate {
+                            rail_id: "RTP".into(),
+                            available: None,
+                            capacity_per_minute_cents: Some(Some(10_000)),
+                        },
+                    },
+                    Disruption {
+                        minute: 12,
+                        update: RailUpdate {
+                            rail_id: "ACH".into(),
+                            available: Some(true),
+                            capacity_per_minute_cents: None,
+                        },
+                    },
+                    Disruption {
+                        minute: 16,
+                        update: RailUpdate {
+                            rail_id: "ACH".into(),
+                            available: None,
+                            capacity_per_minute_cents: Some(Some(10_000)),
+                        },
+                    },
+                    Disruption {
+                        minute: 20,
+                        update: RailUpdate {
+                            rail_id: "ACH".into(),
+                            available: None,
+                            capacity_per_minute_cents: Some(Some(200_000)),
+                        },
+                    },
+                    Disruption {
+                        minute: 20,
+                        update: RailUpdate {
+                            rail_id: "RTP".into(),
+                            available: None,
+                            capacity_per_minute_cents: Some(Some(100_000)),
+                        },
+                    },
+                ]
+            } else {
+                vec![]
+            },
         }
     }
 }
@@ -159,6 +221,8 @@ pub struct ObservedRun {
     pub simulator: Simulator,
     pub payments: BTreeMap<u128, Dossier>,
     pub samples: VecDeque<Sample>,
+    /// Newest 32 network changes and paired reoptimization reports.
+    pub network_events: VecDeque<Event>,
 }
 impl ObservedRun {
     fn new(scenario: Scenario, seed: u64) -> Result<Self, SimulationError> {
@@ -166,13 +230,25 @@ impl ObservedRun {
             simulator: Simulator::new(scenario, seed)?,
             payments: BTreeMap::new(),
             samples: VecDeque::new(),
+            network_events: VecDeque::new(),
         })
     }
     fn step(&mut self) -> Result<(), SimulationError> {
         let (report, mut evidence) = self.simulator.step_observed()?;
         for event in report.events {
+            if matches!(
+                event.kind,
+                EventKind::DisruptionApplied(_) | EventKind::Reoptimized(_)
+            ) {
+                if self.network_events.len() == 32 {
+                    self.network_events.pop_front();
+                }
+                self.network_events.push_back(event.clone());
+            }
             let sequence = match &event.kind {
-                EventKind::RailTick { .. } => continue,
+                EventKind::RailTick { .. }
+                | EventKind::DisruptionApplied(_)
+                | EventKind::Reoptimized(_) => continue,
                 EventKind::Generated {
                     sequence,
                     payment,
@@ -201,6 +277,7 @@ impl ObservedRun {
                 }
                 EventKind::Rejected { sequence }
                 | EventKind::RouteAccepted { sequence, .. }
+                | EventKind::PlanRevised { sequence, .. }
                 | EventKind::HopDeparted { sequence, .. }
                 | EventKind::HopSettled { sequence, .. }
                 | EventKind::DeadlineMissed { sequence }
@@ -214,6 +291,15 @@ impl ObservedRun {
             match &event.kind {
                 EventKind::RouteAccepted { route, .. } => {
                     p.route = Some(route.clone());
+                    p.decision_minute = Some(event.minute);
+                }
+                EventKind::PlanRevised {
+                    route,
+                    planned_departures,
+                    ..
+                } => {
+                    p.route = route.clone();
+                    p.planned_departures = planned_departures.clone();
                     p.decision_minute = Some(event.minute);
                 }
                 EventKind::Rejected { .. } => p.status = PaymentStatus::Rejected,
@@ -261,7 +347,7 @@ impl ObservedRun {
                 PaymentStatus::Draining
             } else if active.in_flight_until.is_some() {
                 PaymentStatus::InFlight
-            } else if active.route.is_some() {
+            } else if active.has_complete_plan() {
                 PaymentStatus::Waiting
             } else {
                 PaymentStatus::Queued
@@ -349,8 +435,27 @@ impl Operations {
         *self = next;
         Ok(())
     }
+    /// Same next-minute disruption in both runs, or neither on validation error.
+    pub fn queue_rail_update(&mut self, update: RailUpdate) -> Result<(), SimulationError> {
+        let mut next = self.clone();
+        for run in &mut next.runs {
+            run.simulator.queue_rail_update(update.clone())?;
+        }
+        *self = next;
+        Ok(())
+    }
+    pub fn set_reoptimization_policy(&mut self, policy: ReoptimizationPolicy) {
+        for run in &mut self.runs {
+            run.simulator.set_reoptimization_policy(policy);
+        }
+    }
     pub fn restart(&mut self, seed: u64) -> Result<(), SimulationError> {
-        *self = Self::new(self.preset, seed)?;
+        let mut next = Self::new(self.preset, seed)?;
+        for (run, previous) in next.runs.iter_mut().zip(&self.runs) {
+            run.simulator
+                .set_reoptimization_policy(previous.simulator.reoptimization_policy());
+        }
+        *self = next;
         Ok(())
     }
 }

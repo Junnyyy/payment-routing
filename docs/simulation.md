@@ -35,9 +35,12 @@ budgets. Existing static and finite-schedule APIs remain unchanged.
 
 `next_minute` starts at zero and identifies the next unprocessed minute. Each tick:
 
-1. Resets rail usage and samples recurring availability in rail-ID order.
+1. Applies due scenario/control disruptions transactionally, then resets rail usage
+   and samples effective recurring availability in rail-ID order.
 2. Settles previously dispatched hops due now, in generated payment sequence order.
-3. Generates this minute's arrivals. At `max_active_payments`, records an explicit
+3. When effective conditions changed, compares preserved and fully recomputed
+   unexecuted suffixes for the existing active cohort, installs the selected plans
+   and rebuilds future reservations. Then generates this minute's arrivals. At `max_active_payments`, records an explicit
    overload rejection instead of growing the queue. Settlement can free admission
    space; departures and deadline expiry later in this tick cannot.
 4. With `CheapestStatic`, processes active payments in sequence order. Unrouted payments consult the
@@ -57,12 +60,13 @@ With `Reserved { limits }`, step 4 first plans currently unassigned work against
 a sparse calendar containing every earlier commitment. It tries deterministic
 orders, and bounded pair repair for small heterogeneous groups, then accepts only
 complete feasible routes and reserves their full per-departure principal. Existing
-commitments remain fixed. Execution still follows sequence order and departs at
+commitments remain fixed between disruptions. Execution still follows sequence order and departs at
 the reserved timestamps. Same-minute zero-latency chains consume capacity for
 every hop. Unused prior-minute reservation entries are discarded. Before commit,
 the engine reconstructs future usage from active witnesses, compares it with the
 reservation ledger and checks each deadline. Accepted reserved routes cannot miss
-a deadline; unplanned work can expire, and admission overload remains explicit.
+a deadline while its reservations remain valid; disruption can withdraw a plan,
+leaving its suffix queued to retry or expire. Admission overload remains explicit.
 `RouteAccepted` can reference a service that is closed now but open at its reserved
 departure. Fees remain actual departure costs, not reservation charges.
 
@@ -179,3 +183,8 @@ Numeric rollback tests cover reserved operation and crossing `u64::MAX` time.
 schedule; 3,940 independent bounded-walk/product scenarios check feasible batch
 witnesses and 7,880 single-request fee optima. The benchmark report distinguishes
 fee optimality from elapsed/hop/lexical quality and unknown online optima.
+
+
+Dynamic rail availability/capacity events, next-tick controls, prefix preservation,
+reoptimization policies, churn and matched-cohort comparisons are specified in
+[Disruptions and adaptive replanning](disruptions.md).

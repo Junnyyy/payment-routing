@@ -15,7 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const USAGE: &str = "payment-routing --demo [--seed N] [--scenario balanced|pressure|outage|limited] [--strategy static|reserved]\n\nContinuous synthetic USD payment-network operations console.\nBoth strategies run on identical seeded demand. Starts paused before minute 0.\nRequires an interactive terminal of at least 80 columns by 18 rows.\n\nUsage: cargo run --locked -- --demo\n       cargo run --locked -- --demo --seed 42 --scenario pressure\n       cargo run --locked -- --help\n\nKeys: Space run/pause; . step; +/- speed; r restart; n next seed\n      c scenario; s inspected strategy; 1-6 views; Tab next view\n      j/k rows; PgUp/PgDn; Home/End; Enter inspect; f filter; / search\n      ? help; q / Ctrl-C quit; Esc back or quit";
+const USAGE: &str = "payment-routing --demo [--seed N] [--scenario balanced|pressure|outage|limited|disruptions] [--strategy static|reserved]\n\nContinuous synthetic USD payment-network operations console.\nBoth strategies run on identical seeded demand. Starts paused before minute 0.\nRequires an interactive terminal of at least 80 columns by 18 rows.\n\nUsage: cargo run --locked -- --demo\n       cargo run --locked -- --demo --seed 42 --scenario pressure\n       cargo run --locked -- --help\n\nKeys: Space run/pause; . step; +/- speed; r restart; n next seed\n      c scenario; s inspected strategy; 1-6 views; Tab next view\n      j/k rows; PgUp/PgDn; Home/End; Enter inspect; f filter; / search\n      ? help; q / Ctrl-C quit; Esc back or quit";
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
     Demo {
@@ -47,7 +47,7 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
                 preset = *Preset::ALL
                     .iter()
                     .find(|p| p.name() == pair[1])
-                    .ok_or("scenario must be balanced, pressure, outage or limited")?
+                    .ok_or("scenario must be balanced, pressure, outage, limited or disruptions")?
             }
             "--strategy" => {
                 strategy = match pair[1].as_str() {

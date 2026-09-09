@@ -21,6 +21,7 @@ pub struct Audit {
     live: BTreeMap<u128, Record>,
     metrics: Metrics,
     rails: BTreeMap<String, RailState>,
+    conditions: BTreeMap<String, RailConditions>,
 }
 
 impl Audit {
@@ -29,11 +30,39 @@ impl Audit {
         self.next_minute += 1;
         let minute = report.minute;
         let mut reset = BTreeSet::new();
+        for event in &report.events {
+            if let EventKind::DisruptionApplied(change) = &event.kind {
+                let rail = scenario
+                    .network
+                    .rails
+                    .iter()
+                    .find(|r| r.id == change.rail_id)
+                    .unwrap();
+                let service = scenario
+                    .services
+                    .iter()
+                    .find(|s| s.rail_id == change.rail_id)
+                    .unwrap();
+                let before =
+                    self.conditions
+                        .get(&change.rail_id)
+                        .copied()
+                        .unwrap_or(RailConditions {
+                            available: rail.available,
+                            capacity_per_minute_cents: service.capacity_per_minute_cents,
+                        });
+                assert_eq!(before, change.before);
+                assert_ne!(before, change.after);
+                self.conditions.insert(change.rail_id.clone(), change.after);
+            }
+        }
         let open = |id: &str| {
             let rail = scenario.network.rails.iter().find(|r| r.id == id).unwrap();
             let service = scenario.services.iter().find(|s| s.rail_id == id).unwrap();
             let phase = minute % u128::from(service.period_minutes);
-            rail.available
+            self.conditions
+                .get(id)
+                .map_or(rail.available, |c| c.available)
                 && (u128::from(service.offset_minutes)
                     ..u128::from(service.offset_minutes) + u128::from(service.open_minutes))
                     .contains(&phase)
@@ -57,7 +86,13 @@ impl Audit {
                         .iter()
                         .find(|s| &s.rail_id == rail_id)
                         .unwrap();
-                    assert_eq!(*capacity_cents, service.capacity_per_minute_cents);
+                    assert_eq!(
+                        *capacity_cents,
+                        self.conditions
+                            .get(rail_id)
+                            .map_or(service.capacity_per_minute_cents, |c| c
+                                .capacity_per_minute_cents)
+                    );
                     let state = self.rails.entry(rail_id.clone()).or_insert(RailState {
                         rail_id: rail_id.clone(),
                         open: false,
@@ -70,6 +105,54 @@ impl Audit {
                     });
                     state.open = *available;
                     state.used_this_minute_cents = 0;
+                }
+                EventKind::DisruptionApplied(_) | EventKind::Reoptimized(_) => {}
+                EventKind::PlanRevised {
+                    sequence,
+                    route,
+                    planned_departures,
+                } => {
+                    let p = self.live.get_mut(sequence).unwrap();
+                    let fixed = p.next_hop + usize::from(p.in_flight.is_some());
+                    let old_prefix = p.route.as_ref().map_or(&[][..], |r| &r.hops[..fixed]);
+                    let new_hops = route.as_ref().map_or(&[][..], |r| r.hops.as_slice());
+                    assert!(new_hops.len() >= fixed);
+                    assert_eq!(&new_hops[..fixed], old_prefix);
+                    if let Some(times) = planned_departures {
+                        assert_eq!(times.len(), new_hops.len());
+                    }
+                    let mut at = p.payment.sender.clone();
+                    let mut visited = BTreeSet::from([at.clone()]);
+                    let (mut fee, mut latency) = (0, 0);
+                    for h in new_hops {
+                        let r = scenario
+                            .network
+                            .rails
+                            .iter()
+                            .find(|r| r.id == h.rail_id)
+                            .unwrap();
+                        assert_eq!(h.sender, at);
+                        assert!(
+                            r.participants.contains(&h.sender)
+                                && r.participants.contains(&h.receiver)
+                        );
+                        assert!(visited.insert(h.receiver.clone()));
+                        assert!(
+                            r.max_amount_cents
+                                .is_none_or(|c| p.payment.amount_cents <= c)
+                        );
+                        at = h.receiver.clone();
+                        fee += u128::from(r.fee_cents);
+                        latency += u128::from(r.settlement_minutes);
+                    }
+                    assert!(new_hops.len() == fixed || at == p.payment.receiver);
+                    if let Some(r) = route {
+                        assert_eq!(
+                            (r.total_fee_cents, r.total_settlement_minutes),
+                            (fee, latency)
+                        );
+                    }
+                    p.route = route.clone();
                 }
                 EventKind::Generated {
                     sequence,
@@ -146,7 +229,11 @@ impl Audit {
                                 && r.participants.contains(&hop.receiver)
                         );
                         assert!(visited.insert(hop.receiver.clone()));
-                        assert!(r.available);
+                        assert!(
+                            self.conditions
+                                .get(&r.id)
+                                .map_or(r.available, |c| c.available)
+                        );
                         if scenario.strategy == RoutingStrategy::CheapestStatic {
                             assert!(open(&hop.rail_id));
                         }
@@ -201,7 +288,9 @@ impl Audit {
                         .find(|s| s.rail_id == hop.rail_id)
                         .unwrap();
                     assert!(
-                        s.capacity_per_minute_cents
+                        self.conditions
+                            .get(&hop.rail_id)
+                            .map_or(s.capacity_per_minute_cents, |c| c.capacity_per_minute_cents)
                             .is_none_or(|c| state.used_this_minute_cents <= u128::from(c))
                     );
                     state.departed_hops += 1;
@@ -270,6 +359,79 @@ impl Audit {
             }
         }
         assert_eq!(reset.len(), scenario.network.rails.len());
+        if matches!(scenario.strategy, RoutingStrategy::Reserved { .. }) {
+            let mut future = BTreeMap::<(String, u128), u128>::new();
+            for p in sim.active_payments() {
+                if let Some(route) = &p.route {
+                    let times = p.planned_departures.as_ref().unwrap();
+                    assert_eq!(times.len(), route.hops.len());
+                    let fixed = p.next_hop + usize::from(p.in_flight_until.is_some());
+                    let mut ready = p.in_flight_until.unwrap_or(sim.next_minute());
+                    for (h, &departure) in route.hops.iter().zip(times).skip(fixed) {
+                        let r = scenario
+                            .network
+                            .rails
+                            .iter()
+                            .find(|r| r.id == h.rail_id)
+                            .unwrap();
+                        let service = scenario
+                            .services
+                            .iter()
+                            .find(|s| s.rail_id == h.rail_id)
+                            .unwrap();
+                        let condition =
+                            self.conditions
+                                .get(&h.rail_id)
+                                .copied()
+                                .unwrap_or(RailConditions {
+                                    available: r.available,
+                                    capacity_per_minute_cents: service.capacity_per_minute_cents,
+                                });
+                        assert!(condition.available);
+                        assert!(departure >= ready);
+                        let phase = departure % u128::from(service.period_minutes);
+                        assert!(
+                            phase >= u128::from(service.offset_minutes)
+                                && phase - u128::from(service.offset_minutes)
+                                    < u128::from(service.open_minutes)
+                        );
+                        assert!(
+                            r.max_amount_cents
+                                .is_none_or(|c| p.payment.amount_cents <= c)
+                        );
+                        ready = departure + u128::from(r.settlement_minutes);
+                        if let Some(cap) = condition.capacity_per_minute_cents {
+                            let used = future.entry((h.rail_id.clone(), departure)).or_default();
+                            *used += u128::from(p.payment.amount_cents);
+                            assert!(*used <= u128::from(cap));
+                        }
+                    }
+                    if route.hops.last().unwrap().receiver == p.payment.receiver {
+                        assert!(ready <= p.deadline);
+                    }
+                }
+            }
+            let current = self
+                .rails
+                .iter()
+                .filter(|(id, state)| {
+                    let service = scenario
+                        .services
+                        .iter()
+                        .find(|s| &s.rail_id == *id)
+                        .unwrap();
+                    state.used_this_minute_cents > 0
+                        && self
+                            .conditions
+                            .get(*id)
+                            .map_or(service.capacity_per_minute_cents, |c| {
+                                c.capacity_per_minute_cents
+                            })
+                            .is_some()
+                })
+                .count();
+            assert_eq!(future.len() + current, sim.reservation_entries());
+        }
         assert_eq!(&self.metrics, sim.metrics());
         assert_eq!(
             self.rails.values().collect::<Vec<_>>(),

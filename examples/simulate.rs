@@ -83,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         strategy,
         max_active_payments: 64,
         retained_events: 32,
+        disruptions: vec![],
     };
     let mut manual = Simulator::new(scenario, seed)?;
     let mut paced = manual.clone();

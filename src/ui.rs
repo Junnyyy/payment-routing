@@ -13,7 +13,7 @@ use ratatui::{
 };
 
 const ACCENT: Color = Color::Cyan;
-const HELP: &str = "SIMULATION\nSpace start/pause   . one tick and pause   +/- speed (ticks/second)\nr restart current seed   n next seed (seed + 1, wrapping at u64 max)\nc cycle scenario and reset: balanced / pressure / outage / limited\ns inspect other strategy; both advance together on identical demand\n\nNAVIGATION\n1 overview  2 payments  3 rails  4 network  5 optimizer  6 compare\nTab / Shift-Tab or h/l / arrows change view\nj/k / arrows select or scroll; PgUp/PgDn page; Home follows newest payment\nf cycle payment filter; / search ID, endpoints, status or route rail\nEnter inspects payment or rail and pauses; Esc closes detail/help or quits\n? help and pause; q / Ctrl-C quit; Esc cancels a search\n\nREADING THE CONSOLE\nMinute is the last completed tick; next is the next minute to execute.\nCapacity is shared principal per departure minute, never in-flight load.\nFees are actual departures, including failed work; planned fees are separate.\nSLA failure = overload rejection or deadline miss, counted once.\nQueued samples exclude in-flight work; zero queue does not mean zero failures.\nSearch evidence contains candidates and rejected prefixes from actual trials.\nReserved unresolved/truncated searches do not prove infeasibility.\nAll active + newest 128 terminal dossiers; 32 events and 24 evidence entries.\nComparison cohorts may differ; fees are not a certified optimality gap.\n\nSynthetic USD, accelerated timing. Opening balances are descriptive.\nNo live payments, liquidity constraints, netting or actual settlement.";
+const HELP: &str = "SIMULATION\nSpace start/pause   . one tick and pause   +/- speed (ticks/second)\nr restart current seed   n next seed (seed + 1, wrapping at u64 max)\nc cycle scenario and reset: balanced / pressure / outage / limited / disruptions\ns inspect other strategy; both advance together on identical demand\n\nNAVIGATION\n1 overview  2 payments  3 rails  4 network  5 optimizer  6 compare\nTab / Shift-Tab or h/l / arrows change view\nj/k / arrows select or scroll; PgUp/PgDn page; Home follows newest payment\nf cycle payment filter; / search ID, endpoints, status or route rail\nEnter inspects payment or rail and pauses; Esc closes detail/help or quits\n? help and pause; q / Ctrl-C quit; Esc cancels a search\n\nREADING THE CONSOLE\nMinute is the last completed tick; next is the next minute to execute.\nCapacity is shared principal per departure minute, never in-flight load.\nFees are actual departures, including failed work; planned fees are separate.\nSLA failure = overload rejection or deadline miss, counted once.\nQueued samples exclude in-flight work; zero queue does not mean zero failures.\nSearch evidence contains candidates and rejected prefixes from actual trials.\nReserved unresolved/truncated searches do not prove infeasibility.\nAll active + newest 128 terminal dossiers; 32 events and 24 evidence entries.\nComparison cohorts may differ; fees are not a certified optimality gap.\n\nSynthetic USD, accelerated timing. Opening balances are descriptive.\nNo live payments, liquidity constraints, netting or actual settlement.";
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
@@ -225,10 +225,13 @@ fn overview(app: &App) -> Vec<String> {
     let sim = &app.run().simulator;
     let m = sim.metrics();
     let active = sim.active_payments();
-    let unrouted = active.iter().filter(|p| p.route.is_none()).count();
+    let unrouted = active
+        .iter()
+        .filter(|p| !p.has_complete_plan() && p.in_flight_until.is_none())
+        .count();
     let waiting = active
         .iter()
-        .filter(|p| p.route.is_some() && p.in_flight_until.is_none())
+        .filter(|p| p.has_complete_plan() && p.in_flight_until.is_none())
         .count();
     let flight = active
         .iter()
@@ -302,6 +305,14 @@ fn overview(app: &App) -> Vec<String> {
         String::new(),
         "QUEUE HISTORY (post-tick; in-flight SLA misses can occur at zero queue)".into(),
     ];
+    let a = sim.adaptation_metrics();
+    lines.insert(
+        8,
+        format!(
+            "DISRUPTIONS {} | repairs {} | assignment churn {}/{}",
+            a.rail_changes, a.reoptimizations, a.changed_assignments, a.assignment_comparisons
+        ),
+    );
     let samples = &app.run().samples;
     let tail: Vec<_> = samples.iter().rev().take(48).collect();
     let peak = tail.iter().map(|s| s.queued).max().unwrap_or(0);
@@ -442,16 +453,19 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
     let rows = sim
         .rail_states()
         .iter()
-        .zip(&sim.scenario().services)
+        .zip(&sim.effective_scenario().services)
         .map(|(r, s)| {
             let queue = sim
                 .active_payments()
                 .iter()
                 .filter(|p| {
                     p.in_flight_until.is_none()
-                        && p.route
-                            .as_ref()
-                            .is_some_and(|route| route.hops[p.next_hop].rail_id == r.rail_id)
+                        && p.route.as_ref().is_some_and(|route| {
+                            route
+                                .hops
+                                .get(p.next_hop)
+                                .is_some_and(|h| h.rail_id == r.rail_id)
+                        })
                 })
                 .count();
             let cap = s
@@ -479,9 +493,9 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
         })
         .collect();
     let i = app.tables[2].selected().unwrap_or(0);
-    let r = &sim.scenario().network.rails[i];
+    let r = &sim.effective_scenario().network.rails[i];
     let state = &sim.rail_states()[i];
-    let s = &sim.scenario().services[i];
+    let s = &sim.effective_scenario().services[i];
     let mut reservations: BTreeSlots = Default::default();
     for p in sim.active_payments() {
         if let (Some(route), Some(times)) = (&p.route, &p.planned_departures) {
@@ -544,19 +558,22 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
 fn rail_detail_lines(app: &App) -> Vec<String> {
     let sim = &app.run().simulator;
     let i = app.tables[2].selected().unwrap_or(0);
-    let r = &sim.scenario().network.rails[i];
-    let s = &sim.scenario().services[i];
+    let r = &sim.effective_scenario().network.rails[i];
+    let s = &sim.effective_scenario().services[i];
     let state = &sim.rail_states()[i];
     let mut slots: BTreeSlots = Default::default();
     let mut waits = vec![];
     for p in sim.active_payments() {
         if let Some(route) = &p.route {
-            if p.in_flight_until.is_none() && route.hops[p.next_hop].rail_id == r.id {
+            if p.in_flight_until.is_none()
+                && let Some(hop) = route.hops.get(p.next_hop)
+                && hop.rail_id == r.id
+            {
                 waits.push(format!(
                     "{} {} -> {} USD {} due {}",
                     p.payment.id,
-                    route.hops[p.next_hop].sender,
-                    route.hops[p.next_hop].receiver,
+                    hop.sender,
+                    hop.receiver,
                     money(p.payment.amount_cents as u128),
                     p.deadline
                 ));
@@ -618,6 +635,20 @@ fn rail_detail_lines(app: &App) -> Vec<String> {
         "Capacity usage is departure principal, not in-flight occupancy.".into(),
         "FUTURE RESERVATIONS (all active witnesses, aggregate per minute)".into(),
     ];
+    for e in app.run().network_events.iter().rev() {
+        if let EventKind::DisruptionApplied(c) = &e.kind
+            && c.rail_id == r.id
+        {
+            lines.push(format!(
+                "Change @{}: enabled {} -> {}; capacity {:?} -> {:?} cents",
+                e.minute,
+                c.before.available,
+                c.after.available,
+                c.before.capacity_per_minute_cents,
+                c.after.capacity_per_minute_cents
+            ));
+        }
+    }
     if slots.is_empty() {
         lines.push("None. Static strategy makes no reservations.".into());
     }
@@ -654,7 +685,10 @@ fn network(frame: &mut Frame, area: Rect, app: &mut App) {
                 .filter(|p| {
                     p.in_flight_until.is_none()
                         && p.route.as_ref().map_or(p.payment.sender == n.id, |r| {
-                            r.hops[p.next_hop].sender == n.id
+                            r.hops.get(p.next_hop).map_or_else(
+                                || r.hops.last().is_some_and(|h| h.receiver == n.id),
+                                |h| h.sender == n.id,
+                            )
                         })
                 })
                 .count();
@@ -692,7 +726,7 @@ fn network(frame: &mut Frame, area: Rect, app: &mut App) {
             ])
         })
         .collect();
-    let n = &sim.scenario().network.institutions[app.tables[3].selected().unwrap_or(0)];
+    let n = &sim.effective_scenario().network.institutions[app.tables[3].selected().unwrap_or(0)];
     let text = format!(
         "{} / {}\nQueued = waiting at node; inbound = currently in-flight to node.\nRails join all their members. Opening USD is descriptive, never spent.",
         n.id, n.name
@@ -734,11 +768,72 @@ fn optimizer(app: &App) -> Vec<String> {
         sim.metrics().accepted_routes,
         sim.reservation_entries()
     )];
+    let a = sim.adaptation_metrics();
+    lines.extend([
+        format!(
+            "DISRUPTIONS {} | repairs {} | assignment churn {}/{}",
+            a.rail_changes, a.reoptimizations, a.changed_assignments, a.assignment_comparisons
+        ),
+        format!(
+            "Churn: routes {} / timing-only {} / withdrawn {}",
+            a.changed_routes, a.retimed_only, a.withdrawn
+        ),
+    ]);
+    if let Some(r) = sim.last_reoptimization() {
+        lines.push(format!(
+            "LAST REPAIR @{} {:?} | same planned cohort {}",
+            r.minute, r.selected, r.same_planned_cohort
+        ));
+        for (label, score) in [("Preserve", &r.preserve), ("Recompute", &r.recompute)] {
+            lines.push(format!(
+                "{}: planned {}/{} | fee {}c | time {}m | hops {} | churn {}/{}",
+                label,
+                score.planned,
+                score.eligible_payments,
+                score.remaining_fee_cents,
+                score.remaining_elapsed_minutes,
+                score.remaining_hops,
+                score.changed_assignments,
+                score.previously_planned
+            ));
+        }
+        lines.push(
+            if r.reserved {
+                "Remaining fees/time only. Recompute is bounded, not an optimum certificate."
+            } else {
+                "Static time estimates omit future waiting; no complete SLA certificate."
+            }
+            .into(),
+        );
+        if !r.same_planned_cohort {
+            lines
+                .push("Different served IDs: fee/elapsed differences are not quality gaps.".into());
+        }
+    }
+    lines.push(String::new());
+    lines.push(format!(
+        "Reoptimization policy: {:?}",
+        sim.reoptimization_policy()
+    ));
+    for e in app.run().network_events.iter().rev().take(8) {
+        if let EventKind::DisruptionApplied(c) = &e.kind {
+            lines.push(format!(
+                "@{} {}: enabled {} -> {}; capacity {:?} -> {:?} cents",
+                e.minute,
+                c.rail_id,
+                c.before.available,
+                c.after.available,
+                c.before.capacity_per_minute_cents,
+                c.after.capacity_per_minute_cents
+            ));
+        }
+    }
+    lines.push(String::new());
     match sim.scenario().strategy {
         RoutingStrategy::CheapestStatic => lines.extend([
             "Exact static simple-path search at each FIFO routing attempt.".into(),
             "Objective: fee, latency, hops, lexical hop sequence.".into(),
-            "Uses currently open rails and remaining capacity/SLA. Pins the route.".into(),
+            "Uses currently open rails and remaining capacity/SLA; replans on disruption.".into(),
             "Does not reserve future capacity or predict future windows.".into(),
             "Static search counters: unavailable in this runtime view (not zero).".into(),
         ]),
@@ -914,7 +1009,16 @@ fn detail_lines(app: &App, p: &Dossier) -> Vec<String> {
         p.completed_elapsed_minutes
             .map_or("--".into(), |v| v.to_string())
     ));
-    lines.push("SELECTED ROUTE (accepted plan; fees accrue only on actual departure)".into());
+    if p.route.as_ref().is_some_and(|r| {
+        r.hops
+            .last()
+            .is_some_and(|h| h.receiver != p.payment.receiver)
+    }) {
+        lines
+            .push("FIXED PREFIX ONLY; suffix unresolved after disruption. Awaiting repair.".into());
+    } else {
+        lines.push("SELECTED ROUTE (accepted plan; fees accrue only on actual departure)".into());
+    }
     if let Some(route) = &p.route {
         lines.push(format!(
             "Planned fee USD {} | transit {}m (excludes waiting) | {} hops",
@@ -1000,6 +1104,7 @@ fn detail_lines(app: &App, p: &Dossier) -> Vec<String> {
             EventKind::Generated { .. } => "generated".into(),
             EventKind::Rejected { .. } => "overload rejected (SLA failure)".into(),
             EventKind::RouteAccepted { .. } => "route accepted".into(),
+            EventKind::PlanRevised { .. } => "plan revised after disruption/retry".into(),
             EventKind::HopDeparted {
                 hop,
                 fee_cents,
@@ -1023,7 +1128,9 @@ fn detail_lines(app: &App, p: &Dossier) -> Vec<String> {
                 elapsed_minutes,
                 ..
             } => format!("completed elapsed {}m late {}", elapsed_minutes, late),
-            EventKind::RailTick { .. } => continue,
+            EventKind::RailTick { .. }
+            | EventKind::DisruptionApplied(_)
+            | EventKind::Reoptimized(_) => continue,
         };
         lines.push(format!("@{} #{:<5} {}", e.minute, e.sequence, label));
     }
@@ -1127,6 +1234,23 @@ mod tests {
         app.view = View::Payments;
         app.sync_selection();
         app
+    }
+    #[test]
+    fn disruption_alternatives_and_events_render_together_at_minimum_size() {
+        let mut app = App::new(Preset::Disruptions, 42).unwrap();
+        for _ in 0..13 {
+            app.step();
+        }
+        assert!(app.error.is_none());
+        app.view = View::Optimizer;
+        let output = screen(&mut app, 80, 18, "disruptions-comparison");
+        for expected in ["DISRUPTIONS 3", "LAST REPAIR", "Preserve:", "Recompute:"] {
+            assert!(output.contains(expected), "{output}");
+        }
+        for view in View::ALL {
+            app.view = view;
+            let _ = screen(&mut app, 80, 18, "disruptions-all-views");
+        }
     }
     #[test]
     fn million_payment_ids_and_deadlines_remain_distinct_and_complete() {
@@ -1341,6 +1465,7 @@ mod tests {
             strategy: RoutingStrategy::CheapestStatic,
             max_active_payments: 16,
             retained_events: 32,
+            disruptions: vec![],
         };
         let mut app = App::new(Preset::Balanced, 42).unwrap();
         for run in &mut app.ops.runs {

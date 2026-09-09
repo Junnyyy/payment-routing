@@ -365,6 +365,7 @@ pub fn simulation_case(family: &str, scale: usize) -> Scenario {
         strategy: RoutingStrategy::CheapestStatic,
         max_active_payments: max_active,
         retained_events: history,
+        disruptions: vec![],
     }
 }
 
