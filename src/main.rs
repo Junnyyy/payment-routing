@@ -1,4 +1,5 @@
 mod app;
+mod evaluate_cli;
 mod ui;
 
 use app::App;
@@ -15,9 +16,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-const USAGE: &str = "payment-routing --demo [--seed N] [--scenario balanced|pressure|outage|limited|disruptions] [--strategy static|reserved]\n\nContinuous synthetic USD payment-network operations console.\nBoth strategies run on identical seeded demand. Starts paused before minute 0.\nRequires an interactive terminal of at least 80 columns by 18 rows.\n\nUsage: cargo run --locked -- --demo\n       cargo run --locked -- --demo --seed 42 --scenario pressure\n       cargo run --locked -- --help\n\nKeys: Space run/pause; . step; +/- speed; r restart; n next seed\n      c scenario; s inspected strategy; 1-6 views; Tab next view\n      j/k rows; PgUp/PgDn; Home/End; Enter inspect; f filter; / search\n      ? help; q / Ctrl-C quit; Esc back or quit";
+const USAGE: &str = "payment-routing --evaluate [--scenario all|NAME,...] [--seed N | --seeds N,...] [--strategies static,reserved,preserve,recompute,tight] [--ticks N] [--drain N] [--format text|csv|payments]\n\nHeadless paired evaluation: defaults to all 9 synthetic worlds, seeds 0,1,42, static/reserved, 60 arrival + 60 drain minutes. Replay verification always enabled.\nReports per-seed results, common-case aggregates and worst cases. Censored/errors exit nonzero after reporting.\nScenarios: balanced,pressure,outage,limited,disruptions,missed-connection,reservation-trap,disconnected,capacity-cliff\nExample: cargo run --locked --release -- --evaluate --scenario pressure --seeds 0,1,42 --format csv\n\npayment-routing --demo [--seed N] [--scenario balanced|pressure|outage|limited|disruptions] [--strategy static|reserved]\n\nContinuous synthetic USD payment-network operations console.\nBoth strategies run on identical seeded demand. Starts paused before minute 0.\nRequires an interactive terminal of at least 80 columns by 18 rows.\n\nUsage: cargo run --locked -- --demo\n       cargo run --locked -- --demo --seed 42 --scenario pressure\n       cargo run --locked -- --help\n\nKeys: Space run/pause; . step; +/- speed; r restart; n next seed\n      c scenario; s inspected strategy; 1-6 views; Tab next view\n      j/k rows; PgUp/PgDn; Home/End; Enter inspect; f filter; / search\n      ? help; q / Ctrl-C quit; Esc back or quit";
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
+    Evaluate(evaluate_cli::Options),
     Demo {
         seed: u64,
         preset: Preset,
@@ -29,8 +31,11 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
     if args.is_empty() || matches!(args, [arg] if arg == "--help" || arg == "-h") {
         return Ok(Command::Help);
     }
+    if args[0] == "--evaluate" {
+        return evaluate_cli::parse(&args[1..]).map(Command::Evaluate);
+    }
     if args[0] != "--demo" {
-        return Err("expected --demo or --help".into());
+        return Err("expected --demo or --help (or --evaluate)".into());
     }
     let mut seed = 42;
     let mut preset = Preset::Balanced;
@@ -79,6 +84,7 @@ fn main() -> ExitCode {
 }
 fn execute() -> Result<(), Box<dyn Error>> {
     match parse_args(&env::args().skip(1).collect::<Vec<_>>())? {
+        Command::Evaluate(options) => evaluate_cli::run(options),
         Command::Help => {
             println!("{USAGE}");
             Ok(())

@@ -35,6 +35,25 @@ cargo run --locked --example operations -- 80 42
 The console uses accelerated execution fixtures; the static reference below is
 unchanged. All data and operating rules are synthetic USD.
 
+## Reproducible evaluation
+
+```sh
+cargo run --locked --release -- --evaluate
+cargo run --locked --release -- --evaluate --scenario pressure --seed 42
+cargo run --locked --release -- --evaluate --scenario all --seeds 0,1,42 --format csv
+```
+
+Compare independent strategies on identical revealed demand and surprise events,
+without opening the terminal UI. Results include per-seed and per-world tables,
+pooled metrics, worst cases, service shortfalls and matched payment IDs. The
+explicit score prioritizes on-time delivery before cost; all executed fees count.
+Unfinished work is censored and unranked. Every CLI run verifies exact event/state
+replay. Use `--format payments` to export the complete outcome ledger and
+`--strategies static,reserved,preserve,recompute,tight` to compare policy/limit
+variants. See the [evaluation contract](docs/evaluation.md) for metric definitions,
+horizon/drainage, scenario coverage and verification. The [measured report](docs/evaluation-report.md)
+preserves the 135-run benchmark and opposing failure cases.
+
 ## Disruptions and adaptive routing
 
 ```sh

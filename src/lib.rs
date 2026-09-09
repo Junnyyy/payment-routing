@@ -2,6 +2,7 @@
 
 pub mod batch;
 pub mod demo;
+pub mod evaluation;
 pub mod network;
 pub mod observation;
 pub mod operations;

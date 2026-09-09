@@ -43,6 +43,7 @@ impl State {
         changes: &[AppliedDisruption],
         policy: ReoptimizationPolicy,
         mut evidence: Option<&mut DecisionEvidence>,
+        arrivals: &[ArrivalSample],
     ) -> Result<TickReport, SimulationError> {
         let minute = self.next_minute;
         let mut events = vec![];
@@ -78,7 +79,7 @@ impl State {
         if !changes.is_empty() {
             self.reoptimize(scenario, router, policy, &mut events, &mut evidence)?;
         }
-        self.generate(scenario, &mut events)?;
+        self.generate(scenario, arrivals, &mut events)?;
         if let RoutingStrategy::Reserved { limits } = scenario.strategy {
             self.plan_pending(scenario, router, limits, &mut events, &mut evidence)?;
         }
@@ -119,24 +120,11 @@ impl State {
     fn generate(
         &mut self,
         scenario: &Scenario,
+        samples: &[ArrivalSample],
         events: &mut Vec<Event>,
     ) -> Result<(), SimulationError> {
-        let arrivals = &scenario.arrivals;
-        for _ in 0..arrivals.attempts_per_minute {
-            // All four samples precede probability/admission gates. Queue pressure
-            // and routing outcomes cannot perturb the generated demand stream.
-            let chance = self.random.inclusive(0, 999_999);
-            let flow = &arrivals.flows
-                [self.random.inclusive(0, (arrivals.flows.len() - 1) as u64) as usize];
-            let amount = self
-                .random
-                .inclusive(arrivals.min_amount_cents, arrivals.max_amount_cents);
-            let sla = self
-                .random
-                .inclusive(arrivals.min_sla_minutes, arrivals.max_sla_minutes);
-            if chance >= u64::from(arrivals.probability_per_million) {
-                continue;
-            }
+        for ArrivalSample { flow, amount, sla } in samples {
+            let (amount, sla) = (*amount, *sla);
             let mut deadline = self.next_minute;
             add(&mut deadline, u128::from(sla), "payment deadline")?;
             add(&mut self.metrics.generated, 1, "generated count")?;
