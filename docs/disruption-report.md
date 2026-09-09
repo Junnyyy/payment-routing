@@ -110,10 +110,23 @@ events independently of the production search. Reservation ledgers are rebuilt
 from witnesses before every tick commits.
 
 Across the 1,440 effective-change comparisons in that suite, preservation serves
-fewer payments in **6**, and served identities differ in **41**. No comparison with
+fewer payments in **6**, and served identities differ in **44**. No comparison with
 identical served IDs has higher preservation churn than recomputation in this
 sample. These observations prioritize coverage loss and identity ties for review;
 they do not prove a global minimum-churn policy or performance bound.
+
+Three static FIFO regressions cover 45 executions across all three policies,
+scheduled changes, equivalent controls and unchanged baselines. In the reported
+failure, two 100-cent payments queue until minute 1, when two zero-latency rails
+open with 100-cent capacities and fees of one and two cents. A capacity increase
+on an unrelated rail previously pinned both payments to the cheaper rail and
+caused the second to expire at its minute-1 deadline. With FIFO projection, both
+complete for three cents, matching the unchanged baseline and both candidate fee
+assessments. Other variants verify retained departures, immediate multihop
+execution, positive latency and in-flight suffixes without charging future usage
+to this minute. Each run independently audits execution, and its subsequent ticks
+match observed execution. The corrected static allocations account for the
+updated served-identity count above; the reserved CSV fixtures are unchanged.
 
 Focused regressions verify a capacity reduction that only retimes one of two
 payments, closure during a final hop, repair from an in-flight receiver, prevention
@@ -130,7 +143,7 @@ zero exits on the existing q/Esc/Ctrl-C paths. The library does not depend on
 Ratatui; simulation interfaces carry controls, change events, selected witnesses
 and assessments to both the console and headless examples.
 
-Final validation: **142 tests passed** with all features, including existing exact
+Final validation: **145 tests passed** with all features, including existing exact
 oracles and long-run stress tests. Strict Clippy, formatting and whitespace checks
 passed. The CSV regenerates deterministically. Reproduce the complete checks:
 

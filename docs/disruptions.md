@@ -23,6 +23,14 @@ Recompute discards all unexecuted suffixes and replans that whole cohort using t
 existing strategy and search limits. This is full recomputation, not a claim of
 global optimality. Bounded search failure is unresolved, not infeasibility.
 
+Static candidates process the entire cohort in execution FIFO order. Each new
+route sees the capacity left by the projected same-minute departures of earlier
+candidate plans, including retained routes. Projection follows zero-latency hops,
+charges the first positive-latency departure, and then stops; a blocked hop also
+stops it. In-flight suffixes and later departures consume no current-minute
+budget. Each candidate has its own temporary usage vector, so assessment creates
+no reservations, departures, fees or changes to execution state.
+
 Assignment churn is the number of previously planned eligible payments whose
 ordered remaining `(rail, sender, receiver, absolute departure)` assignments
 change. Static routing has no departure reservations, so its comparison omits
@@ -55,7 +63,9 @@ stable rather than a 1.97.1-specific standard-library index. Ordered maps use it
 documented [BTreeMap iteration](https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#method.iter),
 [entry](https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#method.entry)
 and [retain](https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#method.retain)
-APIs already used in this repository; no dependency changes are required.
+APIs already used in this repository. The static FIFO projection uses documented
+[Vec indexing](https://doc.rust-lang.org/stable/std/vec/struct.Vec.html#indexing)
+for per-rail temporary usage; no dependency changes are required.
 
 
 ## Simulation interfaces
