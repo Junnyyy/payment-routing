@@ -13,7 +13,7 @@ use ratatui::{
 };
 
 const ACCENT: Color = Color::Cyan;
-const HELP: &str = "SIMULATION\nSpace start/pause   . one tick and pause   +/- speed (ticks/second)\nr restart current seed   n next seed (seed + 1, wrapping at u64 max)\nc cycle scenario and reset: balanced / pressure / outage / limited / disruptions\ns inspect other strategy; both advance together on identical demand\n\nNAVIGATION\n1 overview  2 payments  3 rails  4 network  5 optimizer  6 compare\nTab / Shift-Tab or h/l / arrows change view\nj/k / arrows select or scroll; PgUp/PgDn page; Home follows newest payment\nf cycle payment filter; / search ID, endpoints, status or route rail\nEnter inspects payment or rail and pauses; Esc closes detail/help or quits\n? help and pause; q / Ctrl-C quit; Esc cancels a search\n\nREADING THE CONSOLE\nMinute is the last completed tick; next is the next minute to execute.\nCapacity is shared principal per departure minute, never in-flight load.\nFees are actual departures, including failed work; planned fees are separate.\nSLA failure = overload rejection or deadline miss, counted once.\nQueued samples exclude in-flight work; zero queue does not mean zero failures.\nSearch evidence contains candidates and rejected prefixes from actual trials.\nReserved unresolved/truncated searches do not prove infeasibility.\nAll active + newest 128 terminal dossiers; 32 events and 24 evidence entries.\nComparison cohorts may differ; fees are not a certified optimality gap.\n\nSynthetic USD, accelerated timing. Opening balances are descriptive.\nNo live payments, liquidity constraints, netting or actual settlement.";
+const HELP: &str = "CONTROLS\nSpace run/pause   . step   +/- speed   r restart   n next seed\nTab watch/compare   1 watch   2 compare   p payments\nc choose scenario\ns switch strategy   ↑↓ select   Enter inspect   Esc back   q quit\nf payment filter   / search   Home newest   End oldest\ne evidence / comparison totals   PgUp/PgDn scroll details\n\nDIAGNOSTICS\n3 rail metrics   4 network   5 optimizer\n\nREADING THE TABLES\nCapacity: principal departed this minute / that minute's budget.\nMoving: hops in flight. Instant transfers appear in the event line.\nUnassigned: waiting without a complete route; excluded from rail queues.\nMissed: deadline failures, including late or still-moving payments.\nRejected: admission limit reached. Active: all unfinished payments.\nFees: every actual departure, including failed work.\nComparison: identical demand; different completion cohorts.\nDifferences: retained payments with different status, route or paid fee.\nNot retained: record aged out; not an outcome.\nSearch misses are unresolved, not proof of infeasibility.\n\nRETENTION\nAll active + newest 128 terminal payments per strategy.\n32 events and 24 search entries per payment; omissions counted.\n\nSynthetic USD. Accelerated timing. Descriptive opening balances.\nNo live payments, liquidity constraints, netting or actual settlement.";
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
@@ -26,149 +26,158 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         Constraint::Length(2),
         Constraint::Length(1),
         Constraint::Fill(1),
-        Constraint::Length(3),
+        Constraint::Length(2),
     ])
     .areas(area);
-    let sim = &app.run().simulator;
+    let sim = &app.ops.runs[app.strategy].simulator;
     let minute = sim
         .next_minute()
         .checked_sub(1)
-        .map_or("--".into(), |v| v.to_string());
+        .map_or("Ready".into(), |v| format!("{v}m"));
     let state = if app.error.is_some() {
-        "ERROR"
+        "Error"
     } else if app.running {
-        "RUNNING"
+        "Running"
     } else {
-        "PAUSED"
+        "Paused"
     };
-    let title = format!(
-        "PAYMENT OPS / {} / {} / {}   SYNTHETIC USD",
-        app.ops.preset.name(),
-        app.strategy_name(),
-        state
-    );
-    let status = format!(
-        "seed {} | minute {} next {} | {} tick/s | active {}/{} | twin {:.1}ms",
-        sim.seed(),
-        minute,
-        sim.next_minute(),
-        App::SPEEDS[app.speed],
-        sim.active_payments().len(),
-        sim.scenario().max_active_payments,
-        app.last_step.as_secs_f64() * 1000.0
-    );
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::styled(title, Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)),
-            Line::from(status),
-        ]),
+        Paragraph::new(format!(
+            "Payment routing   {} · {}   {} · {}   {} tick/s",
+            app.ops.preset.name(),
+            app.strategy_name(),
+            state,
+            minute,
+            App::SPEEDS[app.speed]
+        )),
         header,
     );
     frame.render_widget(
-        Tabs::new([
-            "1 Overview",
-            "2 Payments",
-            "3 Rails",
-            "4 Network",
-            "5 Optimizer",
-            "6 Compare",
-        ])
-        .select(app.view as usize)
-        .padding("", "")
-        .divider(" | ")
-        .highlight_style(Style::new().fg(ACCENT).add_modifier(Modifier::UNDERLINED)),
+        Tabs::new(["Watch", "Compare"])
+            .select(if app.view == View::Compare {
+                Some(1)
+            } else if app.view == View::Watch {
+                Some(0)
+            } else {
+                None
+            })
+            .padding("", "")
+            .divider("   ")
+            .highlight_style(Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)),
         tabs,
     );
-    if app.help {
-        text_page(
-            frame,
+    if let Some(choice) = app.scenario_choice {
+        let descriptions = [
+            "Normal demand",
+            "More arrivals",
+            "ACH unavailable",
+            "Limited search",
+            "Changing rails",
+        ];
+        let lines = payment_routing::operations::Preset::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, preset)| {
+                Line::styled(
+                    format!(
+                        "{} {:<14} {}",
+                        if i == choice { ">" } else { " " },
+                        preset.name(),
+                        descriptions[i]
+                    ),
+                    if i == choice {
+                        Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::new()
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        frame.render_widget(
+            Paragraph::new(lines).block(Block::bordered().title("Scenario")),
             body,
-            "Keyboard reference (? / Esc close)",
-            HELP.lines().map(str::to_string).collect(),
-            &mut app.help_scroll,
         );
+    } else if app.help {
+        let mut lines = vec![
+            format!("Seed {} · Synthetic USD", sim.seed()),
+            String::new(),
+        ];
+        lines.extend(HELP.lines().map(str::to_string));
+        text_page(frame, body, "Help", lines, &mut app.help_scroll);
+    } else if app.evidence && app.view == View::Compare && app.detail.is_none() {
+        let lines = comparison_totals(app, body.width.saturating_sub(2) as usize);
+        text_page(frame, body, "Totals", lines, &mut app.detail_scroll);
     } else if app.rail_detail {
-        let lines = rail_detail_lines(app);
+        let lines = if app.evidence {
+            rail_detail_lines(app)
+        } else {
+            rail_summary(app)
+        };
         text_page(
             frame,
             body,
-            "Rail investigation / Esc back",
+            if app.evidence {
+                "Rail evidence"
+            } else {
+                "Rail"
+            },
             lines,
             &mut app.detail_scroll,
         );
     } else if let Some(detail) = &app.detail {
-        let lines = detail_lines(app, detail);
+        let lines = if app.evidence {
+            detail_lines(app, detail)
+        } else {
+            payment_summary(app, detail, body.width.saturating_sub(2) as usize)
+        };
         text_page(
             frame,
             body,
-            &format!("{} / payment investigation / Esc back", detail.payment.id),
+            if app.evidence {
+                "Payment evidence"
+            } else {
+                "Payment"
+            },
             lines,
             &mut app.detail_scroll,
         );
     } else {
         match app.view {
-            View::Overview => {
-                let lines = overview(app);
-                text_page(
-                    frame,
-                    body,
-                    "Live execution / j k scroll",
-                    lines,
-                    &mut app.scroll[0],
-                );
-            }
+            View::Watch => watch(frame, body, app),
+            View::Compare => comparison(frame, body, app),
             View::Payments => payments(frame, body, app),
             View::Rails => rails(frame, body, app),
             View::Network => network(frame, body, app),
             View::Optimizer => {
                 let lines = optimizer(app);
-                text_page(
-                    frame,
-                    body,
-                    "Routing behavior / j k scroll",
-                    lines,
-                    &mut app.scroll[4],
-                );
-            }
-            View::Compare => {
-                let lines = compare(app);
-                text_page(
-                    frame,
-                    body,
-                    "Same seed / same minute / different execution outcomes",
-                    lines,
-                    &mut app.scroll[5],
-                );
+                text_page(frame, body, "Diagnostics", lines, &mut app.scroll[4]);
             }
         }
     }
-    let message = if let Some(input) = &app.editing {
-        format!("Search: {input}_  [Enter apply / Esc cancel]")
-    } else if let Some(error) = &app.error {
-        format!("ERROR: {error} [paused; r resets]")
-    } else if app.rail_detail {
-        "Rail utilization + future slots; j/k/PgDn scroll, Home/End; Esc back".into()
-    } else if app.detail.is_some() {
-        "Selected route + actual search evidence; j/k/PgDn scroll, Home/End; Esc back".into()
+    let controls = if app.scenario_choice.is_some() {
+        "↑↓ select   Enter restart   Esc cancel"
+    } else if app.help {
+        "↑↓ scroll   Esc back"
+    } else if app.detail.is_some() || app.rail_detail || app.evidence {
+        "↑↓ scroll   e evidence   p payments   Esc back   ? help"
+    } else if matches!(app.view, View::Watch | View::Compare) {
+        "Space run/pause   ↑↓ select   Enter inspect   Tab view   c scenario   ? help"
+    } else if matches!(app.view, View::Network | View::Optimizer) {
+        "↑↓ select/scroll   Esc back   ? help"
+    } else {
+        "↑↓ select   Enter inspect   / search   Esc back   ? help"
+    };
+    let message = if let Some(error) = &app.error {
+        format!("Error: {error} · r restart")
+    } else if let Some(input) = &app.editing {
+        format!("Search: {input}_   Enter apply   Esc cancel")
     } else {
         app.notice.clone()
     };
     frame.render_widget(
         Paragraph::new(vec![
-            Line::from(
-                "Space run/pause  . step  +/- speed  r restart  n seed  c scenario  s strategy",
-            ),
-            Line::from(
-                "1-6 views  j/k rows  Enter inspect  f filter  / search  ? help  q/Esc quit",
-            ),
-            Line::styled(
-                message,
-                Style::new().fg(if app.error.is_some() {
-                    Color::Red
-                } else {
-                    Color::Yellow
-                }),
-            ),
+            Line::styled(message, Style::new().fg(Color::LightRed)),
+            Line::from(controls),
         ]),
         footer,
     );
@@ -221,126 +230,204 @@ fn text_page(frame: &mut Frame, area: Rect, title: &str, lines: Vec<String>, scr
     );
 }
 
-fn overview(app: &App) -> Vec<String> {
-    let sim = &app.run().simulator;
+fn watch(frame: &mut Frame, area: Rect, app: &mut App) {
+    let [grid, event, totals] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(2),
+        Constraint::Length(3),
+    ])
+    .areas(area);
+    let sim = &app.ops.runs[app.strategy].simulator;
+    let rows = app
+        .watch_rails()
+        .into_iter()
+        .map(|i| {
+            let rail = &sim.rail_states()[i];
+            let service = &sim.effective_scenario().services[i];
+            let queued = sim
+                .active_payments()
+                .iter()
+                .filter(|p| {
+                    p.in_flight_until.is_none()
+                        && p.has_complete_plan()
+                        && p.route
+                            .as_ref()
+                            .and_then(|r| r.hops.get(p.next_hop))
+                            .is_some_and(|h| h.rail_id == rail.rail_id)
+                })
+                .count();
+            let capacity = if sim.next_minute() == 0 {
+                "--".into()
+            } else {
+                service
+                    .capacity_per_minute_cents
+                    .map_or("Unlimited".into(), |cap| {
+                        if cap == 0 {
+                            return "No capacity".into();
+                        }
+                        let filled =
+                            ((rail.used_this_minute_cents * 10) / u128::from(cap)).min(10) as usize;
+                        format!(
+                            "{}{} {:>3}%",
+                            "█".repeat(filled),
+                            "░".repeat(10 - filled),
+                            rail.used_this_minute_cents * 100 / u128::from(cap)
+                        )
+                    })
+            };
+            Row::new(vec![
+                rail.rail_id.clone(),
+                if sim.next_minute() == 0 {
+                    "--"
+                } else if rail.open {
+                    "Open"
+                } else {
+                    "Closed"
+                }
+                .into(),
+                capacity,
+                format!("{queued:>6}"),
+                format!("{:>6}", rail.departed_hops - rail.settled_hops),
+            ])
+        })
+        .collect::<Vec<_>>();
+    let (grid, preview) = if grid.height >= 14 {
+        let [table, preview] =
+            Layout::vertical([Constraint::Length(8), Constraint::Fill(1)]).areas(grid);
+        (table, Some(preview))
+    } else {
+        (grid, None)
+    };
+    frame.render_stateful_widget(
+        Table::new(
+            rows,
+            [
+                Constraint::Length(10),
+                Constraint::Length(10),
+                Constraint::Length(20),
+                Constraint::Length(8),
+                Constraint::Fill(1),
+            ],
+        )
+        .header(
+            Row::new(["Rail", "Status", "Capacity used", "Queued", "Moving"])
+                .bottom_margin(1)
+                .style(Style::new().fg(ACCENT)),
+        )
+        .row_highlight_style(Style::new().bg(Color::DarkGray))
+        .highlight_symbol("> "),
+        grid,
+        &mut app.tables[0],
+    );
+    if let Some(preview) = preview {
+        let lines = rail_summary(app);
+        frame.render_widget(
+            Paragraph::new(wrapped(lines, preview.width as usize).join("\n")),
+            preview,
+        );
+    }
+    let caption = latest_activity(app);
+    frame.render_widget(
+        Paragraph::new(wrapped(vec![caption], event.width as usize).join("\n")),
+        event,
+    );
     let m = sim.metrics();
-    let active = sim.active_payments();
-    let unrouted = active
+    let unassigned = sim
+        .active_payments()
         .iter()
         .filter(|p| !p.has_complete_plan() && p.in_flight_until.is_none())
         .count();
-    let waiting = active
-        .iter()
-        .filter(|p| p.has_complete_plan() && p.in_flight_until.is_none())
-        .count();
-    let flight = active
-        .iter()
-        .filter(|p| p.in_flight_until.is_some())
-        .count();
-    let draining = active.iter().filter(|p| p.sla_failed).count();
-    let oldest = active
-        .iter()
-        .filter(|p| p.in_flight_until.is_none())
-        .map(|p| {
-            sim.next_minute()
-                .saturating_sub(1)
-                .saturating_sub(p.arrived_at)
-        })
-        .max()
-        .unwrap_or(0);
-    let active_volume: u128 = active.iter().map(|p| p.payment.amount_cents as u128).sum();
-    let ontime = m.completed - m.completed_late;
-    let mut lines = vec![
-        format!(
-            "DEMAND {} generated / USD {} | accepted routes {}",
-            m.generated,
-            money(m.generated_volume_cents),
-            m.accepted_routes
-        ),
-        format!(
-            "ACTIVE {} | unrouted {} | wait slot {} | in flight {} | draining {}",
-            active.len(),
-            unrouted,
-            waiting,
-            flight,
-            draining
-        ),
-        format!(
-            "QUEUE oldest {}m | active principal USD {} | reserve slots {}",
-            oldest,
-            money(active_volume),
-            sim.reservation_entries()
-        ),
-        format!(
-            "DELIVERY {} completed ({} on time, {} late) | expired {} | overload {}",
-            m.completed, ontime, m.completed_late, m.expired, m.rejected
-        ),
-        format!(
-            "SLA failures {} / generated {} = {} | failed USD {}",
-            m.sla_failures,
-            m.generated,
-            percent(m.sla_failures, m.generated),
-            money(m.sla_failed_volume_cents)
-        ),
-        format!(
-            "FEES actual USD {} | completed USD {} | mean elapsed {}m",
-            money(m.routing_cost_cents),
-            money(m.completed_volume_cents),
-            ratio(m.completed_elapsed_minutes, m.completed)
-        ),
-        format!(
-            "HOPS {} departed / {} settled | hop principal USD {}",
-            m.departed_hops,
-            m.settled_hops,
-            money(m.departed_principal_cents)
-        ),
-        format!(
-            "CONSERVATION {} = {} completed + {} expired + {} rejected + {} active",
-            m.generated,
-            m.completed,
-            m.expired,
-            m.rejected,
-            active.len()
-        ),
-        String::new(),
-        "QUEUE HISTORY (post-tick; in-flight SLA misses can occur at zero queue)".into(),
-    ];
-    let a = sim.adaptation_metrics();
-    lines.insert(
-        8,
-        format!(
-            "DISRUPTIONS {} | repairs {} | assignment churn {}/{}",
-            a.rail_changes, a.reoptimizations, a.changed_assignments, a.assignment_comparisons
-        ),
+    let summary = format!(
+        "On time {}   Missed {}   Rejected {}   Active {}   Fees ${}\nUnassigned {}",
+        m.completed - m.completed_late,
+        m.sla_failures - m.rejected,
+        m.rejected,
+        sim.active_payments().len(),
+        money(m.routing_cost_cents),
+        unassigned
     );
-    let samples = &app.run().samples;
-    let tail: Vec<_> = samples.iter().rev().take(48).collect();
-    let peak = tail.iter().map(|s| s.queued).max().unwrap_or(0);
-    let bars: String = tail
-        .iter()
-        .rev()
-        .map(|s| {
-            ['.', ':', '-', '=', '+', '*', '#', '@']
-                [(s.queued * 7).checked_div(peak).unwrap_or(0).min(7)]
-        })
-        .collect();
-    lines.push(format!(
-        "{} | peak {} | latest {}",
-        bars,
-        peak,
-        samples.back().map_or(0, |s| s.queued)
-    ));
-    lines.push("MINUTE / QUEUED / FLIGHT / COMPLETED total / SLA FAIL total".into());
-    for s in samples.iter().rev().take(12) {
-        lines.push(format!(
-            "{} / {} / {} / {} / {}",
-            s.minute, s.queued, s.in_flight, s.completed, s.sla_failures
-        ));
+    frame.render_widget(
+        Paragraph::new(
+            wrapped(
+                summary.lines().map(str::to_string).collect(),
+                totals.width as usize,
+            )
+            .join("\n"),
+        ),
+        totals,
+    );
+}
+
+fn latest_activity(app: &App) -> String {
+    let sim = &app.ops.runs[app.strategy].simulator;
+    if sim.next_minute() == 0 {
+        return "Space to start".into();
     }
-    lines.push(
-        "All amounts USD. Fees include failed work. Completion latency includes waiting.".into(),
-    );
-    lines
+    let now = sim.next_minute() - 1;
+    let change = app.run().network_events.iter().rev().find_map(|e| {
+        if now.saturating_sub(e.minute) <= 3
+            && let EventKind::DisruptionApplied(c) = &e.kind
+        {
+            let mut changes = vec![];
+            if c.before.available != c.after.available {
+                changes.push(if c.after.available {
+                    if sim
+                        .rail_states()
+                        .iter()
+                        .any(|r| r.rail_id == c.rail_id && !r.open)
+                    {
+                        "enabled · window closed".into()
+                    } else {
+                        "enabled".into()
+                    }
+                } else {
+                    "closed".into()
+                });
+            }
+            if c.before.capacity_per_minute_cents != c.after.capacity_per_minute_cents {
+                changes.push(format!(
+                    "capacity {}",
+                    c.after
+                        .capacity_per_minute_cents
+                        .map_or("unlimited".into(), |v| format!("${}/m", money(v as u128)))
+                ));
+            }
+            Some(format!(
+                "{}m · {} {}",
+                e.minute,
+                c.rail_id,
+                changes.join(" · ")
+            ))
+        } else {
+            None
+        }
+    });
+    change
+        .or_else(|| {
+            sim.recent_events().iter().rev().find_map(|e| {
+                if now.saturating_sub(e.minute) > 3 {
+                    return None;
+                }
+                event_label(&e.kind).map(|label| format!("{}m · {label}", e.minute))
+            })
+        })
+        .unwrap_or_else(|| "Waiting for activity".into())
+}
+
+fn event_label(kind: &EventKind) -> Option<String> {
+    match kind {
+        EventKind::Completed { sequence, late, .. } => Some(format!(
+            "SIM-{sequence} delivered{}",
+            if *late { " late" } else { "" }
+        )),
+        EventKind::HopDeparted { sequence, hop, .. } => Some(format!(
+            "SIM-{sequence} · {} → {} · {}",
+            hop.sender, hop.receiver, hop.rail_id
+        )),
+        EventKind::DeadlineMissed { sequence } => Some(format!("SIM-{sequence} missed deadline")),
+        EventKind::Rejected { sequence } => Some(format!("SIM-{sequence} rejected")),
+        _ => None,
+    }
 }
 
 fn table(
@@ -449,7 +536,7 @@ fn payments(frame: &mut Frame, area: Rect, app: &mut App) {
 }
 fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
     let [grid, detail] = Layout::vertical([Constraint::Fill(1), Constraint::Length(5)]).areas(area);
-    let sim = &app.run().simulator;
+    let sim = &app.ops.runs[app.strategy].simulator;
     let rows = sim
         .rail_states()
         .iter()
@@ -492,7 +579,7 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
             ])
         })
         .collect();
-    let i = app.tables[2].selected().unwrap_or(0);
+    let i = app.selected_rail();
     let r = &sim.effective_scenario().network.rails[i];
     let state = &sim.rail_states()[i];
     let s = &sim.effective_scenario().services[i];
@@ -556,8 +643,8 @@ fn rails(frame: &mut Frame, area: Rect, app: &mut App) {
     );
 }
 fn rail_detail_lines(app: &App) -> Vec<String> {
-    let sim = &app.run().simulator;
-    let i = app.tables[2].selected().unwrap_or(0);
+    let sim = &app.ops.runs[app.strategy].simulator;
+    let i = app.selected_rail();
     let r = &sim.effective_scenario().network.rails[i];
     let s = &sim.effective_scenario().services[i];
     let state = &sim.rail_states()[i];
@@ -672,7 +759,7 @@ fn rail_detail_lines(app: &App) -> Vec<String> {
 type BTreeSlots = std::collections::BTreeMap<u128, u128>;
 fn network(frame: &mut Frame, area: Rect, app: &mut App) {
     let [grid, detail] = Layout::vertical([Constraint::Fill(1), Constraint::Length(4)]).areas(area);
-    let sim = &app.run().simulator;
+    let sim = &app.ops.runs[app.strategy].simulator;
     let rows = sim
         .scenario()
         .network
@@ -760,7 +847,7 @@ fn network(frame: &mut Frame, area: Rect, app: &mut App) {
     );
 }
 fn optimizer(app: &App) -> Vec<String> {
-    let sim = &app.run().simulator;
+    let sim = &app.ops.runs[app.strategy].simulator;
     let d = sim.routing_diagnostics();
     let mut lines = vec![format!(
         "POLICY {} | accepted routes {} | current reservations {}",
@@ -896,84 +983,285 @@ fn optimizer(app: &App) -> Vec<String> {
     }
     lines
 }
-fn compare(app: &App) -> Vec<String> {
+fn short_status(p: Option<&Dossier>) -> &'static str {
+    match p.map(|p| p.status) {
+        None => "Not retained",
+        Some(PaymentStatus::Queued) => "Unassigned",
+        Some(PaymentStatus::Waiting) => "Waiting",
+        Some(PaymentStatus::InFlight) => "In transit",
+        Some(PaymentStatus::Draining) => "Late · moving",
+        Some(PaymentStatus::Completed) => "Delivered",
+        Some(PaymentStatus::Late) => "Delivered late",
+        Some(PaymentStatus::Expired) => "Expired",
+        Some(PaymentStatus::Rejected) => "Rejected",
+    }
+}
+
+fn comparison_values(app: &App) -> Vec<(&'static str, String, String)> {
     let a = &app.ops.runs[0].simulator;
     let b = &app.ops.runs[1].simulator;
     let x = a.metrics();
     let y = b.metrics();
+    Vec::from([
+        (
+            "On time",
+            (x.completed - x.completed_late).to_string(),
+            (y.completed - y.completed_late).to_string(),
+        ),
+        (
+            "Missed",
+            (x.sla_failures - x.rejected).to_string(),
+            (y.sla_failures - y.rejected).to_string(),
+        ),
+        ("Rejected", x.rejected.to_string(), y.rejected.to_string()),
+        (
+            "Active",
+            a.active_payments().len().to_string(),
+            b.active_payments().len().to_string(),
+        ),
+        (
+            "Fees",
+            format!("${}", money(x.routing_cost_cents)),
+            format!("${}", money(y.routing_cost_cents)),
+        ),
+    ])
+}
+
+fn comparison_totals(app: &App, width: usize) -> Vec<String> {
+    let mut lines = paired_line("", "Static", "Reserved", width);
+    for (label, left, right) in comparison_values(app) {
+        lines.extend(paired_line(label, &left, &right, width));
+    }
+    lines.push(String::new());
+    lines.push("Same demand · In progress".into());
+    lines
+}
+
+fn comparison(frame: &mut Frame, area: Rect, app: &mut App) {
+    let [summary, grid] =
+        Layout::vertical([Constraint::Length(9), Constraint::Fill(1)]).areas(area);
+    let mut lines = vec![format!("{:<18}{:>22}{:>22}", "", "Static", "Reserved")];
+    for (label, left, right) in comparison_values(app) {
+        let fit = |value: String| {
+            if value.len() > 22 {
+                "See totals (e)".into()
+            } else {
+                value
+            }
+        };
+        lines.push(format!("{label:<18}{:>22}{:>22}", fit(left), fit(right)));
+    }
+    lines.push(String::new());
+    lines.push("Same demand · In progress · e totals".into());
+    frame.render_widget(Paragraph::new(lines.join("\n")), summary);
+    let ids = app.payment_ids();
+    if ids.is_empty() {
+        frame.render_widget(Paragraph::new("No payment differences yet"), grid);
+        return;
+    }
+    let id_width = ids
+        .iter()
+        .filter_map(|id| app.selected_dossier(*id))
+        .map(|p| p.payment.id.len())
+        .max()
+        .unwrap_or(10)
+        .max(10)
+        .min(area.width as usize - 42);
+    let rows = ids
+        .iter()
+        .map(|id| {
+            let p = app.selected_dossier(*id).unwrap();
+            let id_lines = wrapped(vec![p.payment.id.clone()], id_width);
+            Row::new(vec![
+                id_lines.join("\n"),
+                short_status(app.ops.runs[0].payments.get(id)).into(),
+                short_status(app.ops.runs[1].payments.get(id)).into(),
+                match (
+                    app.ops.runs[0].payments.get(id),
+                    app.ops.runs[1].payments.get(id),
+                ) {
+                    (Some(a), Some(b)) if a.status != b.status => "Status",
+                    (Some(a), Some(b)) if a.route != b.route => "Route",
+                    (Some(_), Some(_)) => "Fee",
+                    _ => "Record",
+                }
+                .into(),
+            ])
+            .height(id_lines.len() as u16)
+        })
+        .collect::<Vec<_>>();
+    frame.render_stateful_widget(
+        Table::new(
+            rows,
+            [
+                Constraint::Length(id_width as u16),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+                Constraint::Length(7),
+            ],
+        )
+        .header(
+            Row::new(["Payment", "Static", "Reserved", "Change"]).style(Style::new().fg(ACCENT)),
+        )
+        .row_highlight_style(Style::new().bg(Color::DarkGray))
+        .highlight_symbol("> "),
+        grid,
+        &mut app.tables[1],
+    );
+}
+
+fn paired_line(label: &str, left: &str, right: &str, width: usize) -> Vec<String> {
+    let label_width = 10;
+    let col = width.saturating_sub(label_width + 4) / 2;
+    let labels = wrapped(vec![label.into()], label_width);
+    let a = wrapped(vec![left.into()], col.max(1));
+    let b = wrapped(vec![right.into()], col.max(1));
+    (0..a.len().max(b.len()).max(labels.len()))
+        .map(|i| {
+            format!(
+                "{:<label_width$}  {:<col$}  {:<col$}",
+                labels.get(i).map_or("", String::as_str),
+                a.get(i).map_or("", String::as_str),
+                b.get(i).map_or("", String::as_str)
+            )
+        })
+        .collect()
+}
+
+fn payment_summary(app: &App, p: &Dossier, width: usize) -> Vec<String> {
+    let left = app.ops.runs[0].payments.get(&p.sequence);
+    let right = app.ops.runs[1].payments.get(&p.sequence);
     let mut lines = vec![
         format!(
-            "Seed {} | {} | both next minute {}",
-            a.seed(),
-            app.ops.preset.name(),
-            a.next_minute()
+            "{} · ${} · {} → {}",
+            p.payment.id,
+            money(p.payment.amount_cents as u128),
+            p.payment.sender,
+            p.payment.receiver
         ),
-        "METRIC                         STATIC             RESERVED".into(),
+        format!("Due {}m", p.deadline),
+        String::new(),
     ];
-    for (label, left, right) in [
-        (
-            "Generated / active",
-            format!("{} / {}", x.generated, a.active_payments().len()),
-            format!("{} / {}", y.generated, b.active_payments().len()),
-        ),
-        (
-            "Completed / late",
-            format!("{} / {}", x.completed, x.completed_late),
-            format!("{} / {}", y.completed, y.completed_late),
-        ),
-        (
-            "Expired / overload",
-            format!("{} / {}", x.expired, x.rejected),
-            format!("{} / {}", y.expired, y.rejected),
-        ),
-        (
-            "SLA failures / generated",
-            percent(x.sla_failures, x.generated),
-            percent(y.sla_failures, y.generated),
-        ),
-        (
-            "Completed USD",
-            money(x.completed_volume_cents),
-            money(y.completed_volume_cents),
-        ),
-        (
-            "Actual fees USD",
-            money(x.routing_cost_cents),
-            money(y.routing_cost_cents),
-        ),
-        (
-            "Mean completed elapsed m",
-            ratio(x.completed_elapsed_minutes, x.completed),
-            ratio(y.completed_elapsed_minutes, y.completed),
-        ),
-    ] {
-        lines.push(format!("{label:<27} {left:>15} {right:>20}"));
-    }
-    lines.extend([
-        "Cohorts differ: fees are not a certified optimality gap.".into(),
-        "Identical generated demand; completion cohorts and active work can differ.".into(),
-        "Lower fees alone do not imply better routing. No global optimality gap.".into(),
-        "s switches the inspected strategy without resetting either run.".into(),
-        "MATCHED RETAINED PAYMENTS (same ID/amount, status and planned route fee)".into(),
-    ]);
-    for (id, p) in app.ops.runs[0].payments.iter().rev().take(16) {
-        if let Some(q) = app.ops.runs[1].payments.get(id) {
-            lines.push(format!(
-                "{} | {} {} | {} {}",
-                p.payment.id,
-                p.status.label(),
-                p.route
-                    .as_ref()
-                    .map_or("--".into(), |r| money(r.total_fee_cents)),
-                q.status.label(),
-                q.route
-                    .as_ref()
-                    .map_or("--".into(), |r| money(r.total_fee_cents))
-            ));
+    lines.extend(paired_line("", "Static", "Reserved", width));
+    lines.extend(paired_line(
+        "Status",
+        short_status(left),
+        short_status(right),
+        width,
+    ));
+    let route = |p: Option<&Dossier>| {
+        p.and_then(|p| {
+            p.route.as_ref().map(|r| {
+                let suffix = if r
+                    .hops
+                    .last()
+                    .is_some_and(|h| h.receiver != p.payment.receiver)
+                {
+                    " · partial"
+                } else {
+                    ""
+                };
+                format!("{}{suffix}", route_long(r))
+            })
+        })
+        .unwrap_or_else(|| "—".into())
+    };
+    lines.extend(paired_line("Route", &route(left), &route(right), width));
+    let fee =
+        |p: Option<&Dossier>| p.map_or("—".into(), |p| format!("${}", money(p.actual_fee_cents)));
+    lines.extend(paired_line("Fee paid", &fee(left), &fee(right), width));
+    lines.push(String::new());
+    let mut minutes = std::collections::BTreeSet::new();
+    for p in [left, right].into_iter().flatten() {
+        for e in &p.events {
+            minutes.insert(e.minute);
         }
+    }
+    let events = |p: Option<&Dossier>, minute: u128| {
+        p.map(|p| {
+            p.events
+                .iter()
+                .filter(|e| e.minute == minute)
+                .filter_map(|e| match &e.kind {
+                    EventKind::Generated { .. } => Some("Arrived".into()),
+                    EventKind::HopDeparted { hop, .. } => Some(format!("Departed {}", hop.rail_id)),
+                    EventKind::HopSettled { hop, .. } => Some(format!("At {}", hop.receiver)),
+                    EventKind::Completed { late, .. } => {
+                        Some(if *late { "Delivered late" } else { "Delivered" }.into())
+                    }
+                    EventKind::DeadlineMissed { .. } => Some("Missed deadline".into()),
+                    EventKind::Rejected { .. } => Some("Rejected".into()),
+                    EventKind::Expired { .. } => Some("Expired".into()),
+                    EventKind::PlanRevised { .. } => Some("Plan revised".into()),
+                    _ => None,
+                })
+                .collect::<Vec<String>>()
+                .join("; ")
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "—".into())
+    };
+    for minute in minutes {
+        let a = events(left, minute);
+        let b = events(right, minute);
+        if a != "—" || b != "—" {
+            lines.extend(paired_line(&format!("{minute}m"), &a, &b, width));
+        }
+    }
+    let omitted = |p: Option<&Dossier>| p.map_or(0, |p| p.omitted_events);
+    if omitted(left) > 0 || omitted(right) > 0 {
+        lines.push(format!(
+            "Earlier events omitted: Static {} · Reserved {}",
+            omitted(left),
+            omitted(right)
+        ));
     }
     lines
 }
+
+fn rail_summary(app: &App) -> Vec<String> {
+    let sim = &app.ops.runs[app.strategy].simulator;
+    let i = app.selected_rail();
+    let rail = &sim.effective_scenario().network.rails[i];
+    let service = &sim.effective_scenario().services[i];
+    let state = &sim.rail_states()[i];
+    let mut lines = vec![
+        format!("{} · {}", rail.id, rail.participants.join(" · ")),
+        format!(
+            "Fee ${} · Transit {}m",
+            money(rail.fee_cents as u128),
+            rail.settlement_minutes
+        ),
+        format!(
+            "Used ${} / {} per minute",
+            money(state.used_this_minute_cents),
+            service
+                .capacity_per_minute_cents
+                .map_or("unlimited".into(), |v| format!("${}", money(v as u128)))
+        ),
+        String::new(),
+    ];
+    for p in sim.active_payments() {
+        if let Some(hop) = p.route.as_ref().and_then(|r| r.hops.get(p.next_hop))
+            && hop.rail_id == rail.id
+        {
+            lines.push(format!(
+                "{} · ${} · {} → {} · {}",
+                p.payment.id,
+                money(p.payment.amount_cents as u128),
+                hop.sender,
+                hop.receiver,
+                p.in_flight_until
+                    .map_or("Waiting".into(), |v| format!("Arrives {v}m"))
+            ));
+        }
+    }
+    if lines.len() == 4 {
+        lines.push("No active payments".into());
+    }
+    lines
+}
+
 fn detail_lines(app: &App, p: &Dossier) -> Vec<String> {
     let mut lines = vec![
         format!(
@@ -1163,13 +1451,6 @@ fn route_long(route: &Route) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
-fn ratio(n: u128, d: u128) -> String {
-    if d == 0 {
-        "--".into()
-    } else {
-        format!("{:.2}", n as f64 / d as f64)
-    }
-}
 fn percent(n: u128, d: u128) -> String {
     if d == 0 {
         "n/a".into()
@@ -1235,6 +1516,59 @@ mod tests {
         app.sync_selection();
         app
     }
+    #[test]
+    fn compact_watch_and_compare_render_actual_state_without_search_noise() {
+        let mut app = App::new(Preset::Disruptions, 42).unwrap();
+        for _ in 0..13 {
+            app.step();
+        }
+        let before = app.ops.clone();
+        let output = screen(&mut app, 80, 18, "watch-demo");
+        assert!(output.find("RTP").unwrap() < output.find("FEDNOW").unwrap());
+        assert!(output.find("FEDNOW").unwrap() < output.find("ACH").unwrap());
+        assert!(output.contains("12m · ACH enabled"), "{output}");
+        for absent in ["CONSERVATION", "SEARCH", "SLA", "twin", "1-6"] {
+            assert!(!output.contains(absent), "{output}");
+        }
+        let _ = screen(&mut app, 120, 32, "watch-demo");
+        assert_eq!(app.ops, before);
+        for _ in 13..40 {
+            app.step();
+        }
+        let before = app.ops.clone();
+        app.view = View::Compare;
+        let output = screen(&mut app, 80, 18, "compare-demo");
+        for label in ["On time", "Missed", "Rejected", "Active", "Fees", "Change"] {
+            assert!(output.contains(label), "{output}");
+        }
+        key(&mut app, KeyCode::Enter);
+        let output = screen(&mut app, 80, 18, "inspect-demo");
+        assert!(
+            output.contains("Fee paid") && !output.contains("SEARCH EVIDENCE"),
+            "{output}"
+        );
+        assert_eq!(app.ops, before);
+    }
+
+    #[test]
+    fn paired_columns_preserve_wide_money_and_minutes() {
+        let value = format!("${}", money(u128::MAX));
+        let label = format!("{}m", u128::MAX);
+        let rows = paired_line(&label, &value, &value, 78);
+        let mut labels = String::new();
+        let mut left = String::new();
+        let mut right = String::new();
+        for row in rows {
+            assert!(row.len() <= 78);
+            labels.push_str(row[..10].trim());
+            left.push_str(row[12..44].trim());
+            right.push_str(row[46..].trim());
+        }
+        assert_eq!(labels, label);
+        assert_eq!(left, value);
+        assert_eq!(right, value);
+    }
+
     #[test]
     fn disruption_alternatives_and_events_render_together_at_minimum_size() {
         let mut app = App::new(Preset::Disruptions, 42).unwrap();
@@ -1310,7 +1644,7 @@ mod tests {
                 app.view = view;
                 for (w, h) in [(80, 18), (120, 32)] {
                     let output = screen(&mut app, w, h, &format!("{}-{view:?}", preset.name()));
-                    for expected in ["SYNTHETIC USD", "minute 79 next 80", "q/Esc quit"] {
+                    for expected in ["Payment routing", "79m", "? help"] {
                         assert!(
                             output.contains(expected),
                             "{preset:?}/{view:?}: missing {expected}\n{output}"
@@ -1321,8 +1655,8 @@ mod tests {
                         assert!(output.contains("Reserved:"));
                     }
                     if view == View::Compare {
-                        assert!(output.contains("STATIC"));
-                        assert!(output.contains("RESERVED"));
+                        assert!(output.contains("Static"));
+                        assert!(output.contains("Reserved"));
                     }
                 }
             }
@@ -1354,6 +1688,7 @@ mod tests {
         app.follow_latest = false;
         app.sync_selection();
         key(&mut app, KeyCode::Enter);
+        key(&mut app, KeyCode::Char('e'));
         let top = screen(&mut app, 80, 18, "detail-top");
         assert!(top.contains("SELECTED ROUTE"));
         let mut all = top;
@@ -1368,6 +1703,7 @@ mod tests {
         let bottom = screen(&mut app, 80, 18, "detail-end");
         assert!(bottom.contains("completed elapsed"));
         assert!(!app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)));
+        key(&mut app, KeyCode::Esc);
         key(&mut app, KeyCode::End);
         screen(&mut app, 80, 18, "payments-end");
         assert!(app.tables[1].offset() > 0);
@@ -1383,6 +1719,7 @@ mod tests {
         assert_eq!(dossier.status, PaymentStatus::Completed);
         assert_eq!(dossier.completed_elapsed_minutes, Some(0));
         app.detail = Some(dossier.clone());
+        app.evidence = true;
         let output = screen(&mut app, 80, 18, "same-tick-reservation");
         assert!(
             output.contains("reserved @0"),
@@ -1477,8 +1814,10 @@ mod tests {
         }
         assert_eq!(app.run().payments[&1].status, PaymentStatus::Draining);
         let output = screen(&mut app, 80, 18, "in-flight-sla");
-        assert!(output.contains("draining 1"));
-        assert!(output.contains("unrouted 0 | wait slot 0 | in flight 1"));
+        assert!(output.contains("Missed 1"));
+        assert!(output.contains("Unassigned 0"));
+        let bc = output.lines().find(|line| line.contains("BC ")).unwrap();
+        assert_eq!(bc.split_whitespace().last(), Some("1"), "{output}");
         assert_eq!(app.run().simulator.metrics().generated, 1);
         app.view = View::Payments;
         app.query = "SIM-1".into();
@@ -1489,15 +1828,19 @@ mod tests {
         assert_eq!(p.actual_fee_cents, 2);
         assert_eq!(p.completed_elapsed_minutes, Some(4));
         key(&mut app, KeyCode::Enter);
-        assert!(screen(&mut app, 80, 18, "late-payment").contains("Executed fee USD 0.02"));
+        let output = screen(&mut app, 80, 18, "late-payment");
+        assert!(
+            output.contains("$0.02") && output.contains("Delivered late"),
+            "{output}"
+        );
     }
 
     #[test]
     fn empty_filtered_small_help_and_zero_denominators_are_readable() {
         let mut app = App::new(Preset::Balanced, 42).unwrap();
         let before = screen(&mut app, 80, 18, "paused-empty");
-        assert!(before.contains("minute -- next 0"));
-        assert!(before.contains("n/a"));
+        assert!(before.contains("Ready"));
+        assert!(before.contains("Space to start"));
         app.view = View::Payments;
         assert!(screen(&mut app, 80, 18, "empty-payments").contains("No matching payments"));
         for _ in 0..8 {
