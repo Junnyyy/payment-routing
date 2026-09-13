@@ -162,6 +162,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         "↑↓ scroll   e evidence   p payments   Esc back   ? help"
     } else if matches!(app.view, View::Watch | View::Compare) {
         "Space run/pause   ↑↓ select   Enter inspect   Tab view   c scenario   ? help"
+    } else if matches!(app.view, View::Network | View::Optimizer) {
+        "↑↓ select/scroll   Esc back   ? help"
     } else {
         "↑↓ select   Enter inspect   / search   Esc back   ? help"
     };

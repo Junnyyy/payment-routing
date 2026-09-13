@@ -400,6 +400,7 @@ impl App {
             }
             KeyCode::Char('p') => {
                 if self.rail_detail {
+                    self.filter = Filter::All;
                     self.query = self.run().simulator.rail_states()[self.selected_rail()]
                         .rail_id
                         .clone();
