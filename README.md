@@ -29,11 +29,24 @@ and fees for the same demand. Select a payment difference to inspect both journe
 
 ## Strategies
 
-- **Static** picks the cheapest currently usable route and waits to execute it.
-- **Reserved** plans departure times and reserves future capacity with a bounded search.
+**Static** chooses the cheapest route using rails usable now. It keeps that route
+and waits when a hop is blocked. It does not book future capacity, so waiting
+can cause a deadline miss.
 
-Neither wins every workload. Compare delivery outcomes before fees;
-spending less can mean delivering fewer payments.
+**Reserved** chooses a route and departure times, then books capacity for every
+hop. It tries several payment orders, preferring more planned payments, then
+lower fees. Its search has limits, so it can miss a workable plan.
+
+A route's fee is the sum of its hop fees. Reserved plans must also satisfy:
+
+```text
+Booked amount per rail/minute ≤ capacity
+Planned arrival ≤ payment deadline
+```
+
+Both strategies see the same demand; neither knows future disruptions, which
+can invalidate plans. Compare delivery outcomes before fees. Spending less
+can mean delivering fewer payments.
 
 ## Model
 
