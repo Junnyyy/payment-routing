@@ -1,5 +1,6 @@
 # Project guidance
 
+- Any control that leaves comparison totals for Payments must clear `evidence`; otherwise the list renders while row movement, Enter and Tab remain in detail mode. The filter regression checks `2 → e → f`, row selection, inspection and return navigation without advancing the simulation.
 - The demo's primary views are Watch and Compare (Tab, 1/2). Watch uses stable RTP/FEDNOW/ACH/FEDWIRE display order without changing simulator ordering. Enter pauses for concise rail or paired-payment inspection; `e` reveals evidence or full comparison totals. `p` opens payments; 3/4/5 retain rail/network/search diagnostics. Scenario selection (`c`) pauses and commits a restart only on Enter. Keep primary copy short and details on demand.
 - Compare selects the union of retained IDs with differing status, route or actual fee. A record missing from one retained history is "Not retained", never rejected or unrouted. Select the surviving record's strategy for detailed evidence. Missed = SLA failures minus admission rejects; active includes late in-flight work. Watch capacity is departure principal for the last tick, Moving is unsettled hops, and unassigned work is separate from per-rail queues. Same-tick transfers are events, not artificial travel animation.
 

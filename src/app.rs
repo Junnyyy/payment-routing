@@ -436,6 +436,7 @@ impl App {
             }
             KeyCode::Char('f') if self.detail.is_none() && !self.rail_detail => {
                 self.view = View::Payments;
+                self.evidence = false;
                 self.filter = Filter::ALL[(self.filter as usize + 1) % Filter::ALL.len()];
                 self.selected_payment = None;
                 self.sync_selection();
@@ -593,6 +594,29 @@ mod tests {
         key(&mut app, KeyCode::Down);
         key(&mut app, KeyCode::Esc);
         assert!(app.scenario_choice.is_none());
+        assert_eq!(app.ops, expected);
+    }
+
+    #[test]
+    fn filtering_from_totals_restores_payment_navigation() {
+        let mut app = App::new(Preset::Balanced, 42).unwrap();
+        for _ in 0..40 {
+            app.step();
+        }
+        let expected = app.ops.clone();
+        key(&mut app, KeyCode::Char('2'));
+        key(&mut app, KeyCode::Char('e'));
+        key(&mut app, KeyCode::Char('f'));
+        assert_eq!(app.view, View::Payments);
+        let ids = app.payment_ids();
+        assert!(ids.len() > 1);
+        key(&mut app, KeyCode::Down);
+        assert_eq!(app.selected_payment, Some(ids[1]));
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(app.detail.as_ref().map(|p| p.sequence), Some(ids[1]));
+        key(&mut app, KeyCode::Esc);
+        key(&mut app, KeyCode::Tab);
+        assert_eq!(app.view, View::Compare);
         assert_eq!(app.ops, expected);
     }
 
