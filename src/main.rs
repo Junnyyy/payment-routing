@@ -16,7 +16,26 @@ use std::{
     time::{Duration, Instant},
 };
 
-const USAGE: &str = "payment-routing --evaluate [--scenario all|NAME,...] [--seed N | --seeds N,...] [--strategies static,reserved,preserve,recompute,tight] [--ticks N] [--drain N] [--format text|csv|payments]\n\nHeadless paired evaluation: defaults to all 9 synthetic worlds, seeds 0,1,42, static/reserved, 60 arrival + 60 drain minutes. Replay verification always enabled.\nReports per-seed results, common-case aggregates and worst cases. Censored/errors exit nonzero after reporting.\nScenarios: balanced,pressure,outage,limited,disruptions,missed-connection,reservation-trap,disconnected,capacity-cliff\nExample: cargo run --locked --release -- --evaluate --scenario pressure --seeds 0,1,42 --format csv\n\npayment-routing --demo [--seed N] [--scenario balanced|pressure|outage|limited|disruptions] [--strategy static|reserved]\n\nContinuous synthetic USD payment-network operations console.\nBoth strategies run on identical seeded demand. Starts paused before minute 0.\nRequires an interactive terminal of at least 80 columns by 18 rows.\n\nUsage: cargo run --locked -- --demo\n       cargo run --locked -- --demo --seed 42 --scenario pressure\n       cargo run --locked -- --help\n\nKeys: Space run/pause; . step; +/- speed; r restart; n next seed\n      c scenario; s inspected strategy; 1-6 views; Tab next view\n      j/k rows; PgUp/PgDn; Home/End; Enter inspect; f filter; / search\n      ? help; q / Ctrl-C quit; Esc back or quit";
+const USAGE: &str =
+    "payment-routing --demo [--seed N] [--scenario NAME] [--strategy static|reserved]
+
+Watch a synthetic payment network. Compare strategies. Inspect payments.
+Starts paused; both strategies share demand. Requires an 80 x 18 terminal.
+
+Run: cargo run --locked -- --demo
+Scenarios: balanced, pressure, outage, limited, disruptions
+Keys: Space run/pause; Tab watch/compare; Enter inspect; ? help; q quit
+
+payment-routing --evaluate [--scenario all|NAME,...] [--seed N | --seeds N,...]
+    [--strategies static,reserved,preserve,recompute,tight]
+    [--ticks N] [--drain N] [--format text|csv|payments]
+
+Headless paired evaluation with exact replay verification.
+Defaults: all 9 worlds; seeds 0,1,42; static/reserved; 60 arrival + 60 drain minutes.
+Censored or errored runs are unranked and exit nonzero.
+Additional worlds: missed-connection, reservation-trap, disconnected, capacity-cliff
+See docs/evaluation.md for metrics and reproduction.";
+
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
     Evaluate(evaluate_cli::Options),
@@ -207,16 +226,16 @@ mod tests {
             },
             || {
                 let frames = frames.borrow();
-                assert!(frames[0].contains("RUNNING"));
+                assert!(frames[0].contains("Running"));
                 assert!(
                     frames
                         .last()
                         .unwrap()
-                        .contains("ERROR: injected tick failure"),
+                        .contains("Error: injected tick failure"),
                     "error hidden at blocking read: {}",
                     frames.last().unwrap()
                 );
-                assert!(!frames.last().unwrap().contains("RUNNING"));
+                assert!(!frames.last().unwrap().contains("Running"));
                 Ok(Event::Key(KeyEvent::new(
                     KeyCode::Char('q'),
                     KeyModifiers::NONE,
