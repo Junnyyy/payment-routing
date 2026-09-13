@@ -1,5 +1,9 @@
 # Payment routing
 
+Payment rails are the systems banks use to transfer money to one another,
+such as ACH and Fedwire. Each has its own fees, timing and rules.
+Routing means choosing how a payment reaches its destination.
+
 A cheap payment route may be too slow. A fast route may run out of capacity.
 When many payments share the same rails, routing each one affects the others.
 
