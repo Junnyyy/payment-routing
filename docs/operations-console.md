@@ -1,82 +1,81 @@
-# Operations console
+# Demo guide
 
-Launch `cargo run --locked -- --demo`. The console starts paused before minute 0,
-with seed 42, the balanced scenario and Reserved selected for inspection. Optional
-`--seed N`, `--scenario balanced|pressure|outage|limited`, and
-`--strategy static|reserved` are validated before terminal initialization.
+```sh
+cargo run --locked -- --demo
+```
 
-All execution is synthetic USD with accelerated timing. The static
-`demo_network()` fixture and exact routing APIs retain their existing inputs and
-contracts. The console generates new instructions; it does not execute the 12
-stored static fixture payments. No real transfers or liquidity debits occur.
+Starts paused on Watch with seed 42, balanced demand and Reserved selected.
+Optional arguments: `--seed N`, `--scenario NAME`, `--strategy static|reserved`.
+Both strategies advance together. Time is the last processed minute; Ready means
+minute zero has not run. All execution is synthetic USD with accelerated timing.
+The continuous stream is separate from the static fixture's 12 payments.
 
-## Keyboard workflow
+## Watch
+
+The rail table stays in a fixed display order. Capacity is principal departed in
+the last processed minute, divided by that minute's budget. It is not occupancy.
+Queued counts only payments assigned to that rail; Unassigned counts waiting work
+without a complete route. Moving counts unsettled hops. Zero-latency transfers
+appear as events rather than artificial travel animations.
+
+The event line shows a recent disruption or payment event, timestamped and retained
+for up to three simulated minutes. Re-enabling a rail does not override its service
+window. Larger terminals also show the selected rail's active payments.
+Enter pauses and opens the rail; `p` opens its matching payment records.
+
+## Compare and inspect
+
+Compare shows identical revealed demand under Static and Reserved:
+
+| Label | Meaning |
+| --- | --- |
+| On time | Completed by the deadline |
+| Missed | Deadline failures, including late deliveries and late work still in flight |
+| Rejected | Admission limit reached |
+| Active | All unfinished payments, including late work in flight |
+| Fees | Every executed hop, including failed work |
+
+Missed and Active can overlap. They are not additive outcome buckets.
+These are ongoing runs, so there is no winner or optimality-gap claim.
+`e` opens full totals; very wide values link there instead of clipping.
+
+The payment table lists retained IDs with different status, route or actual fee.
+Change identifies the first difference: status, then route, then fee.
+Not retained means one strategy's record aged out, not that it rejected the payment.
+Enter pauses and shows both statuses, routes, actual fees and recorded events.
+A partial route is a fixed prefix awaiting a suffix. A dash in the timeline means
+no displayed event, not evidence of waiting. Omitted histories are counted.
+
+`e` opens detailed evidence for the strategy named in the header. If that strategy's
+record aged out, inspection selects the surviving record's strategy. Esc returns
+to the short inspection, then to the originating view.
+
+## Controls
 
 | Key | Action |
 | --- | --- |
-| Space | Start or pause both strategies |
-| . | Pause and execute exactly one minute |
-| + / = / - | Select 1, 2, 5, 20 or 100 target ticks/second |
-| r | Restart current seed, paused, clearing runtime history |
-| n | Start the next seed (increment, wrapping at `u64::MAX`), paused |
-| c | Cycle scenarios and restart the current seed, paused |
-| s | Inspect the other strategy at the same minute without resetting |
-| 1–6 | Overview, payments, rails, network, optimizer, comparison |
-| Tab / Shift-Tab, h/l, Left/Right | Cycle views |
-| j/k, Up/Down, PgUp/PgDn | Move rows or scroll a text page |
-| Home / End | First/last row or page; Home enables newest-payment following |
-| f | Cycle all, active, queued, SLA/overload and finished payment filters |
-| / | Search ID, endpoints, status or accepted route rail; pauses execution |
-| Enter | Apply search, or inspect selected payment/rail and pause |
-| Esc | Cancel search, close detail/help, otherwise quit |
-| ? | Open help and pause |
-| q / Ctrl-C | Quit (q is text while editing search) |
+| Space / . | Run or pause / step one minute |
+| Tab / 1 / 2 | Switch Watch and Compare / Watch / Compare |
+| ↑↓ or j/k | Select or scroll |
+| Enter | Inspect and pause |
+| e | Evidence in inspection; full totals in Compare |
+| Esc | Back; quit from Watch or Compare |
+| p | Payment list; from a rail, filter to that rail |
+| / / f | Search payments / cycle filter |
+| Home / End | Follow newest / select oldest; top / bottom in details |
+| PgUp / PgDn | Page through records or details |
+| c | Choose scenario; Enter restarts, Esc cancels |
+| s | Inspect the other strategy |
+| + / - | Playback speed |
+| r / n | Restart / next seed |
+| 3 / 4 / 5 | Rail metrics / network / optimizer diagnostics |
+| ? | Help and pause |
+| q / Ctrl-C | Quit |
 
-The header shows the **last processed minute** and **next minute**, avoiding an
-ambiguous off-by-one time display. A tick processes minute 0 first. Speed controls
-host pacing only; they consume no randomness. Ticks do not catch up after a slow
-calculation, and drawing is limited to about 20 Hz during uninterrupted running.
-The target rate is not a throughput promise. `twin ...ms` measures host computation
-for the pair of observed ticks, excluding draw time. The paused loop blocks on
-input or resize. Terminal initialization, ordinary errors and exit all restore
-terminal modes; simulation errors pause and retain the last committed twin state.
-
-## Reading each view
-
-- **Overview:** generated and active principal, unrouted and reserved queues,
-  in-flight and draining work, oldest queue age, fees, delivery/SLA metrics and
-  conservation. Scroll to 120 retained post-tick samples and recent values. A zero
-  queue can coexist with in-flight SLA failures. SLA failure rate divides all
-  failures (including overload) by generated demand; active work is not a success.
-- **Payments:** newest first by default. Moving selection holds a payment ID as
-  rows change; Home resumes following newest. Filters apply to retained records.
-  A selected record that ages out of retention falls back to the newest match.
-  ID and deadline columns grow to fit their values. When the terminal cannot fit
-  them on one line, continuation lines preserve every digit within the same row.
-  Enter shows endpoints, deadline, status, the other strategy's retained result,
-  actual fees and elapsed completion time, accepted route and reserved departure
-  timestamps (including same-tick completions), search evidence, and a bounded
-  lifecycle.
-- **Rails:** last-tick open state, used principal/capacity, utilization, assigned
-  waiting payments, cumulative departures and fees. Enter exposes full membership,
-  service windows, cumulative departed/settled/in-flight principal and hops, all
-  future reserved slots and payments waiting for that rail. Unrouted demand is
-  excluded from per-rail queues. Unlimited/zero denominators display `n/a`.
-- **Network:** current queued and inbound work at each institution, active work
-  originating there, shared-rail membership and descriptive opening balances.
-- **Optimizer:** selected policy and objective, reservations, Reserved search
-  attempts/expansions/candidates, truncations, unresolved trials, repairs and
-  configured limits. Static runtime counters are labeled unavailable. Counters
-  include discarded order/repair trials and do not count unique payments.
-- **Comparison:** both strategies always use the same generated demand and the
-  same simulated minute. Completion counts, overload, expiry, fees and latency
-  are visible together at 80×18. Scroll to matched retained payment IDs.
-  Completion cohorts differ, so a fee difference is **not an optimality gap**.
-
-A minimum 80×18 terminal is supported. Text details wrap and scroll; tables keep
-the selection visible. Wider/taller terminals expose more records at once.
-These are keyboard views with sparse color for selection and lifecycle state;
-every status also has a textual label.
+Manual selection holds a payment ID while it remains in the current list.
+Returning to Home follows the newest record. Payment filters apply to the payment
+list; Compare always considers both retained histories. Search and scenario
+selection pause execution. Playback speed changes host pacing only.
 
 ## Evidence and separation
 
@@ -148,54 +147,20 @@ limited run reports 4,055 truncated searches and 6,684 unresolved trials, not
 a separate console fixture shows a zero-queue in-flight SLA miss at minute 3,
 then a late completion at minute 4 with its two cents of actual fees.
 
-## Verification and iteration
+## Verification
 
-The first 80×18 review exposed clipped rail utilization, comparison fees below
-the fold, an unscrollable help page, and payment selection following an old record
-without a visible mode. The revised console adds full rail drill-down, puts fees
-alongside outcomes on the first comparison screen, clamps scrollable help/details,
-and labels `FOLLOW newest` versus `HOLD ID`. Actual execution costs are separate
-from planned route fees. These changes were rerun against real deterministic
-scenarios and terminal sessions.
+The [development checks](development.md#verification) include all-feature tests,
+Clippy and real PTY sessions. The terminal tests cover both main views at 80×18
+and 120×32, stable selection, paired timelines, retained-record differences,
+wide values, search, scenario cancellation and evidence navigation.
+`scripts/test_console.py` checks run/pause, all five presets, resizing and terminal
+restoration after q, Esc and Ctrl-C. Snapshots are written under ignored `target/`.
 
-```sh
-cargo fmt --check
-cargo test --locked --offline --all-features
-cargo clippy --locked --offline --all-targets --all-features -- -D warnings
-CONSOLE_SNAPSHOT_DIR=target/console-screens cargo test --locked --offline --bin payment-routing
-cargo build --locked --offline
-python3 scripts/test_console.py
-```
-
-Tests compare observation with ordinary simulation state/event-for-event across
-five scenarios and both policies, replay twin runs on restart, and bound histories
-across 300 ticks per scenario. An additional headless run at seed 7 checks 1,000
-ticks per scenario against both ordinary simulators. TestBackend renders all six views at 80×18 and
-120×32, with empty/no-result and undersized cases, retained terminal-payment
-investigation, keyboard controls, selection identity, and scrolling.
-Separate rendering fixtures cover million-scale IDs/deadlines and `u128::MAX`
-values at 80, 120 and 180 columns, including selection and inspection of wrapped
-rows. These fixtures exercise large values directly rather than claiming a run
-has reached those counts or times.
-
-The standard-library PTY harness launches the actual binary. It exercises
-start/pause, stepping, speed, search, payment/rail inspection, comparison,
-restart/new seed, resize to 120×32 and 40×10, and 80 ticks each of pressure,
-outage and limited scenarios. Separate q, Esc and Ctrl-C runs exit zero, emit
-alternate-screen restoration, and preserve terminal modes. On macOS the harness
-keeps a shell-like parent alive to inspect modes before the controlling terminal
-is revoked. Its small VT reader is supplemental snapshot tooling, not a full
-terminal emulator. Snapshots live under ignored `target/console-pty`.
-
-Version-specific Context7 references used with detected Ratatui 0.30.0 and its
-locked Crossterm 0.29.0 re-export: [Table / row_highlight_style](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Table.html#method.row_highlight_style),
-[TableState](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.TableState.html),
+Ratatui is locked to 0.30.0, with its Crossterm 0.29.0 re-export.
+Context7 references: [stateful Table / selection](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Table.html#method.row_highlight_style),
 [Row / height](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Row.html#method.height),
-[Paragraph / scroll](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Paragraph.html#method.scroll),
-[initialization and restoration](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/src/init.rs),
-and [Crossterm re-export](https://github.com/ratatui/ratatui/blob/ratatui-v0.30.0/ratatui-crossterm/README.md).
-No dependencies were added or upgraded.
-
+[Paragraph / scroll](https://docs.rs/ratatui/0.30.0/ratatui/widgets/struct.Paragraph.html#method.scroll)
+and [Layout / vertical](https://docs.rs/ratatui/0.30.0/ratatui/layout/struct.Layout.html#method.vertical).
 
 ## Dynamic disruptions
 
@@ -209,9 +174,9 @@ is unchanged. At seed 42 after 80 ticks, static completes 93, expires 66 and spe
 changes 3 of 5 previously planned assignments across five repair decisions. Both
 generate 163 payments; these different completion cohorts are not quality gaps.
 
-Overview reports aggregate assignment churn. Optimizer shows both candidate
+Optimizer diagnostics show aggregate assignment churn and both candidate
 assessments at 80×18, the selected policy and explicit allowances, and recent rail
-changes. Rails uses effective capacity/availability and retains change evidence;
+changes. Rail evidence uses effective capacity/availability and retains change evidence;
 payment details distinguish an accepted route from a fixed prefix awaiting a new
 suffix. `PlanRevised` carries the final composed witness even for same-tick
 completion; `Reoptimized` contains both assessments. Operations retains the newest
